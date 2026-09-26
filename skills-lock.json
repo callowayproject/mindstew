@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "grill-with-ui": {
+      "source": "jasonku09/grill-with-ui",
+      "sourceType": "github",
+      "skillPath": "SKILL.md",
+      "computedHash": "bfc97d6631a43ce8b530c080f477f719b00d0b96675c5393e93f5888035f7455"
+    }
+  }
+}
