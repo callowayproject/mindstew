@@ -1,0 +1,280 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "mindstew"
+description = "A native macOS app that builds a personal wiki from documents and lets a local chat agent work over it."
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Programming Language :: Python :: 3.14",
+]
+keywords = ["mindstew"]
+dynamic = ["version"]
+license = { file = "LICENSE" }
+requires-python = ">=3.14"
+dependencies = [
+    "pydantic-settings>=2.8.1",
+]
+authors = [
+    { name = "Corey Oordt", email = "coreyoordt@gmail.com" },
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/callowayproject/mindstew"
+Documentation = "https://callowayproject.github.io/mindstew"
+Repository = "https://github.com/callowayproject/mindstew"
+Changelog = "https://github.com/callowayproject/mindstew/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "generate-changelog",
+    "bump-my-version",
+    "uv",
+]
+test = [
+    "pytest",
+    "pytest-socket",
+    "coverage",
+    "pytest-asyncio",
+    "pytest-cov",
+    "pre-commit",
+]
+docs = [
+]
+
+#[project.scripts]
+#mindstew = mindstew.cli:cli
+
+[tool.hatch.version]
+path = "mindstew/__init__.py"
+
+[tool.uv]
+default-groups = ["dev", "test", "docs"]
+
+[tool.coverage.run]
+branch = true
+omit = ["**/test_*.py", "**/__main__.py"]
+source = ["mindstew"]
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    # a more strict default pragma
+    "pragma: no cover",
+    "pragma: no-coverage",
+    # allow defensive code
+    "^\\s*raise AssertionError\\b",
+    "^\\s*raise NotImplementedError\\b",
+    "^\\s*return NotImplemented\\b",
+    "^\\s*raise$",
+    # typing-related code
+    "^if (False|TYPE_CHECKING):",
+    ": \\.\\.\\.(\\s*#.*)?$",
+    "^ +\\.\\.\\.$",
+    "-> ['\"]?NoReturn['\"]?:",
+]
+
+[tool.pytest.ini_options]
+addopts = [
+    "--cov=mindstew",
+    "--cov-branch",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-report=html",
+]
+norecursedirs = [
+    ".*",
+    "build",
+    "dist",
+    "{arch}",
+    "*.egg",
+    "venv",
+    "requirements*",
+    "lib",
+]
+python_files = [
+    "test_*.py",
+    "*_test.py",
+    "tests.py",
+]
+
+[tool.interrogate]
+ignore-init-method = true
+ignore-init-module = false
+ignore-magic = true
+ignore-semiprivate = false
+ignore-private = false
+ignore-property-decorators = false
+ignore-module = false
+ignore-nested-functions = true
+ignore-nested-classes = true
+ignore-setters = false
+fail-under = 90
+exclude = ["setup.py", "docs", "build"]
+ignore-regex = ["^get$", "^mock_.*", ".*BaseClass.*"]
+verbose = 0
+quiet = false
+whitelist-regex = []
+color = true
+
+[tool.black]
+line-length = 119
+
+[tool.ruff]
+exclude = [
+    ".bzr",
+    ".direnv",
+    ".eggs",
+    ".git",
+    ".hg",
+    ".mypy_cache",
+    ".nox",
+    ".pants.d",
+    ".pytype",
+    ".ruff_cache",
+    ".svn",
+    ".tox",
+    ".venv",
+    "__pypackages__",
+    "_build",
+    "buck-out",
+    "build",
+    "dist",
+    "node_modules",
+    "venv",
+]
+
+# Same as Black.
+line-length = 119
+
+[tool.ruff.lint]
+preview = true
+select = [
+    "A", # flake8-builtins
+    "ANN", # flake8-annotations
+    "B", # flake8-bugbear
+    "BLE", # flake8-blind except
+    "C4", # flake8-comprehensions
+    "C90", # McCabe complexity
+    "D", # pydocstyle
+    "E", # pycodestyle errors
+    "EXE", # flake8-executable
+    "F", # pyflakes
+    "I", # isort
+    "N", # PEP8 naming
+    "NPY", # NumPy-specific rules
+    "PD", # Pandas-vet
+    "PERF", # Perflint
+    "PGH", # PyGrep hooks
+    "PLC", # Pylint conventions
+    "PLE", # Pylint errors
+    "PLW", # Pylint warnings
+    "Q", # flake8-quotes
+    "RUF", # Ruff-specific rules
+    "S", # flake8-bandit
+    "SIM", # flake8-simplify
+    "TCH", # Flake8 type-checking
+    "W", # pycodestyle warnings
+]
+ignore = [
+    "missing-type-args", # missing-type-args
+    "missing-type-kwargs", # missing-type-kwargs
+    "missing-return-type-special-method", # missing-return-type-special-method
+    "any-type", # any-type
+    "undocumented-magic-method", # undocumented-magic-method
+    "undocumented-public-nested-class", # undocumented-public-nested-class
+    "undocumented-public-init", # undocumented-public-init
+    "unnecessary-multiline-docstring", # fits-on-one-line
+    "multi-line-summary-first-line", # multi-line-summary-first-line
+    "pandas-use-of-dot-values", # pandas-use-of-dot-values
+    "import-outside-top-level", # import-outside-toplevel
+    "unnecessary-lambda", # unnecessary-lambda
+    "eq-without-hash", # eq-without-hash
+    "assert", # assert
+    "hardcoded-bind-all-interfaces", # hardcoded-bind-all-interfaces
+    "suspicious-subprocess-import", # suspicious-subprocess-import
+    "subprocess-popen-with-shell-equals-true", # subprocess-popen-with-shell-equals-true
+]
+
+fixable = ["ALL"]
+unfixable = []
+
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+
+typing-modules = ["typing", "types", "typing_extensions", "mypy", "mypy_extensions"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "missing-type-function-argument", # missing-type-function-argument
+    "missing-type-args", # missing-type-args
+    "missing-type-kwargs", # missing-type-kwargs
+    "missing-return-type-undocumented-public-function", # missing-return-type-undocumented-public-function
+    "missing-return-type-private-function", # missing-return-type-private-function
+    "blanket-type-ignore", # blanket-type-ignore
+    "too-many-branches", # too-many-branches
+    "too-many-arguments", # too-many-arguments
+    "too-many-statements", # too-many-statements
+    "magic-value-comparison", # magic-value-comparison
+    "global-statement", # global-statement
+    "assert", # assert
+    "hardcoded-password-string", # hardcoded-password-string
+    "hardcoded-password-func-arg", # hardcoded-password-func-arg
+    "raise-vanilla-args", # raise-vanilla-args
+    "verbose-raise", # verbose-raise
+    "raise-within-try", # raise-within-try
+]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 10
+
+[tool.ruff.lint.isort]
+order-by-type = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.pydoclint]
+style = "google"
+exclude = '\.git|tests'
+require-return-section-when-returning-nothing = false
+arg-type-hints-in-docstring = false
+check-return-types = false
+skip-checking-raises = true
+quiet = true
+
+[tool.bumpversion]
+current_version = "0.1.0"
+commit = true
+commit_args = "--no-verify"
+tag = true
+tag_name = "{new_version}"
+allow_dirty = true
+parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)(\\.(?P<dev>post)\\d+\\.dev\\d+)?"
+serialize = [
+    "{major}.{minor}.{patch}.{dev}{$PR_NUMBER}.dev{distance_to_latest_tag}",
+    "{major}.{minor}.{patch}"
+]
+message = "Version updated from {current_version} to {new_version}"
+
+[tool.bumpversion.parts.dev]
+values = ["release", "post"]
+
+[[tool.bumpversion.files]]
+filename = "mindstew/__init__.py"
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "Unreleased"
+
+[[tool.bumpversion.files]]
+filename = "CHANGELOG.md"
+search = "{current_version}...HEAD"
+replace = "{current_version}...{new_version}"
