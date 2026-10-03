@@ -65,8 +65,7 @@ def fake_tree() -> QTreeWidget:
 def fake_chat() -> QPlainTextEdit:
     chat = QPlainTextEdit()
     chat.setPlainText(
-        "you: summarize the Q3 planning doc\n\n"
-        "agent: Q3 planning covers three workstreams... [tool: search_wiki]\n"
+        "you: summarize the Q3 planning doc\n\nagent: Q3 planning covers three workstreams... [tool: search_wiki]\n"
     )
     return chat
 
@@ -206,9 +205,7 @@ def build_variant_c() -> QWidget:
     body.addWidget(chat_dock)
 
     toast = QLabel("⏳ embedding chunks 88/140")
-    toast.setStyleSheet(
-        "background:#333; color:white; padding:6px 10px; border-radius:8px;"
-    )
+    toast.setStyleSheet("background:#333; color:white; padding:6px 10px; border-radius:8px;")
     toast.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Fixed)
     outer.addWidget(toast, alignment=Qt.AlignRight | Qt.AlignBottom)
 
@@ -235,9 +232,7 @@ VARIANTS = [
 class SwitcherBar(QWidget):
     def __init__(self, on_prev, on_next):
         super().__init__()
-        self.setStyleSheet(
-            "background:#000; border-radius:14px; color:white; padding:4px 12px;"
-        )
+        self.setStyleSheet("background:#000; border-radius:14px; color:white; padding:4px 12px;")
         lay = QHBoxLayout(self)
         lay.setContentsMargins(10, 4, 10, 4)
         left = QPushButton("◀")
