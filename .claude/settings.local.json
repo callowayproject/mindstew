@@ -1,0 +1,11 @@
+{
+  "skillOverrides": {
+    "anthropic-skills:docx": "off",
+    "anthropic-skills:google-workspace": "off",
+    "find-skills": "off",
+    "anthropic-skills:xlsx": "off",
+    "anthropic-skills:pptx": "off",
+    "anthropic-skills:pdf": "off",
+    "anthropic-skills:morning": "off"
+  }
+}
