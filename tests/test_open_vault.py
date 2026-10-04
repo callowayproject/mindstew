@@ -2,6 +2,7 @@
 
 from typing import TYPE_CHECKING
 
+import pytest
 from click.testing import CliRunner
 
 from mindstew.cli import cli
@@ -55,6 +56,25 @@ def test_open_is_idempotent(tmp_path: Path) -> None:
     result = CliRunner().invoke(cli, ["open", str(tmp_path)])
 
     assert result.exit_code == 0, result.output
+    assert _snapshot(tmp_path) == before
+
+
+@pytest.mark.parametrize(
+    ("name", "is_dir"), [("wiki", False), ("sources", False), (".mindstew", False), ("purpose.md", True)]
+)
+def test_open_conflicting_entry_fails_cleanly(tmp_path: Path, name: str, is_dir: bool) -> None:
+    """A wrong-kind entry on a scaffold path gives a clear error and leaves the folder untouched."""
+    if is_dir:
+        (tmp_path / name).mkdir()
+    else:
+        (tmp_path / name).write_text("x", encoding="utf-8")
+    before = _snapshot(tmp_path)
+
+    result = CliRunner().invoke(cli, ["open", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert name in result.output
+    assert "Traceback" not in result.output
     assert _snapshot(tmp_path) == before
 
 

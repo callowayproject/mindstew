@@ -62,6 +62,21 @@ class VaultExistsError(Exception):
     """Raised when the target folder already contains a complete vault."""
 
 
+class VaultConflictError(Exception):
+    """Raised when an existing entry blocks a scaffold path (e.g. a file named ``wiki``)."""
+
+
+def _find_conflict(root: Path) -> Path | None:
+    """Return the first existing entry of the wrong kind on a scaffold path, or None."""
+    for d in (*ESSENTIAL_DIRS, *DERIVED_DIRS):
+        path = root
+        for part in d.split("/"):
+            path = path / part
+            if path.exists() and not path.is_dir():
+                return path
+    return next((p for f in STARTER_FILES if (p := root / f).exists() and not p.is_file()), None)
+
+
 def is_vault(root: Path) -> bool:
     """Return True if ``root`` holds every essential vault file and folder (derived data is not required)."""
     return all((root / d).is_dir() for d in ESSENTIAL_DIRS) and all((root / f).is_file() for f in STARTER_FILES)
@@ -78,9 +93,12 @@ def create_vault(root: Path) -> None:
 
     Raises:
         VaultExistsError: if ``root`` already contains a complete vault.
+        VaultConflictError: if an existing file or folder blocks a scaffold path; nothing is created.
     """
     if is_vault(root):
         raise VaultExistsError(f"{root} already contains a vault")
+    if (conflict := _find_conflict(root)) is not None:
+        raise VaultConflictError(f"cannot create vault: {conflict} already exists and is the wrong kind of entry")
     for d in (*ESSENTIAL_DIRS, *DERIVED_DIRS):
         (root / d).mkdir(parents=True, exist_ok=True)
     for name, content in STARTER_FILES.items():

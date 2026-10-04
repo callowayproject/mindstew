@@ -6,7 +6,7 @@ import click
 
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
-from mindstew.vault import VaultExistsError, create_vault, is_vault
+from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, is_vault
 
 
 @click.group()
@@ -20,7 +20,7 @@ def new(path: Path) -> None:
     """Create a fresh vault at PATH."""
     try:
         create_vault(path)
-    except VaultExistsError as exc:
+    except (VaultExistsError, VaultConflictError) as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created vault at {path}")
 
@@ -32,7 +32,10 @@ def open_vault(path: Path) -> None:
     if is_vault(path):
         click.echo(f"{path} is already a vault")
         return
-    create_vault(path)
+    try:
+        create_vault(path)
+    except VaultConflictError as exc:
+        raise click.ClickException(str(exc)) from exc
     click.echo(f"Opened vault at {path}")
 
 
