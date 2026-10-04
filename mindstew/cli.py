@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
 from mindstew.vault import VaultExistsError, create_vault
 
@@ -46,3 +47,9 @@ def show(vault: Path, page: str) -> None:
     click.echo(f"tags: {', '.join(found.tags)}")
     click.echo()
     click.echo(found.body.lstrip("\n"), nl=False)
+    links = Resolver(list_pages(vault)).resolve_body(found.body)
+    if links:
+        click.echo("\nlinks:")
+        for target, linked in links:
+            dest = str(linked.path.relative_to(vault / "wiki")) if linked else "(unresolved)"
+            click.echo(f"  {target} -> {dest}")
