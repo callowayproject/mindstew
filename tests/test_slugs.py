@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from mindstew.slugs import new_page_path, slugify
+from mindstew.slugs import MAX_FILENAME_BYTES, WINDOWS_RESERVED, new_page_path, slugify
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -74,3 +74,28 @@ def test_gap_in_suffixes_is_filled(make_vault: Callable[..., Path]) -> None:
     for name in ("x.md", "x-3.md"):
         (root / "wiki" / "concepts" / name).write_text("x", encoding="utf-8")
     assert new_page_path(root, "concept", "x").name == "x-2.md"
+
+
+@pytest.mark.parametrize("title", ["x" * 400, "日本語" * 100, ("word " * 100)])
+def test_long_titles_are_capped_including_suffix(make_vault: Callable[..., Path], title: str) -> None:
+    """Names stay within the byte cap on every collision, and truncation never splits a character."""
+    root = make_vault()
+    for _ in range(12):
+        path = new_page_path(root, "entity", title)
+        assert len(path.name.encode()) <= MAX_FILENAME_BYTES
+        assert not path.exists()
+        path.write_text("x", encoding="utf-8")
+    assert len(list((root / "wiki" / "entities").iterdir())) == 12
+
+
+@pytest.mark.parametrize("title", ["CON", "nul", "Com1", "LPT9", "aux", "COM\u00b9"])
+def test_windows_reserved_names_are_avoided(make_vault: Callable[..., Path], title: str) -> None:
+    """Device names are not valid filenames on Windows, with or without an extension."""
+    name = new_page_path(make_vault(), "entity", title).name
+    assert name.removesuffix(".md") not in WINDOWS_RESERVED
+    assert name.endswith("-page.md")
+
+
+def test_reserved_lookalikes_are_untouched(make_vault: Callable[..., Path]) -> None:
+    """Only exact device names are rewritten."""
+    assert new_page_path(make_vault(), "entity", "Console").name == "console.md"
