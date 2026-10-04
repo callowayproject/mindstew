@@ -49,8 +49,9 @@ def test_resolves_case_insensitively_with_anchors_and_aliases(make_vault: Callab
         page = r.resolve(target)
         assert page is not None, target
         assert page.title == "Ada Lovelace"
-    assert [t for t, _ in r.resolve_body("[[ada lovelace|Ada]] [[Countess#Life]]")] == ["ada lovelace", "Countess"]
-    assert all(p is not None for _, p in r.resolve_body("[[ada lovelace|Ada]] [[Countess#Life]]"))
+    body = "[[ada lovelace|Ada]] [[Countess#Life]]"
+    assert [t for t, _ in r.resolve_body(body)] == ["ada lovelace", "Countess"]
+    assert all(p is not None for _, p in r.resolve_body(body))
 
 
 def test_unresolved_never_raises(make_vault: Callable[..., Path]) -> None:
@@ -82,6 +83,12 @@ def test_malformed_title_and_alias_fields_are_skipped(make_vault: Callable[..., 
     """Absent, null, scalar and non-mapping title/aliases never raise."""
     r = _vault_with_pages(make_vault, {"entities/x.md": f"---\n{field}: {bad}\n---\n"})
     assert r.resolve("anything") is None
+
+
+def test_malformed_alias_items_do_not_hide_good_ones(make_vault: Callable[..., Path]) -> None:
+    """Non-string alias items are dropped but valid siblings still resolve."""
+    r = _vault_with_pages(make_vault, {"entities/x.md": "---\ntitle: X\naliases: [1, {a: b}, ok]\n---\n"})
+    assert r.resolve("OK") is not None
 
 
 def test_show_prints_resolved_and_unresolved_links(make_vault: Callable[..., Path]) -> None:

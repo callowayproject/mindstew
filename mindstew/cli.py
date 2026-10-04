@@ -51,4 +51,5 @@ def show(vault: Path, page: str) -> None:
     if links:
         click.echo("\nlinks:")
         for target, linked in links:
-            click.echo(f"  {target} -> {linked.path.relative_to(vault / 'wiki') if linked else '(unresolved)'}")
+            dest = str(linked.path.relative_to(vault / "wiki")) if linked else "(unresolved)"
+            click.echo(f"  {target} -> {dest}")
