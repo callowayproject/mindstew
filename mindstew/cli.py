@@ -6,6 +6,7 @@ import click
 
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
+from mindstew.registry import load_projects, register
 from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, is_vault
 
 
@@ -22,7 +23,13 @@ def new(path: Path) -> None:
         create_vault(path)
     except (VaultExistsError, VaultConflictError) as exc:
         raise click.ClickException(str(exc)) from exc
+    _register(path)
     click.echo(f"Created vault at {path}")
+
+
+def _register(path: Path) -> None:
+    if notice := register(path):
+        click.echo(notice, err=True)
 
 
 @cli.command(name="open")
@@ -30,19 +37,29 @@ def new(path: Path) -> None:
 def open_vault(path: Path) -> None:
     """Adopt the existing folder PATH as a vault, adding only missing scaffolding."""
     if is_vault(path):
+        _register(path)
         click.echo(f"{path} is already a vault")
         return
     try:
         create_vault(path)
     except VaultConflictError as exc:
         raise click.ClickException(str(exc)) from exc
+    _register(path)
     click.echo(f"Opened vault at {path}")
 
 
 @cli.command()
-@click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
-def ls(vault: Path) -> None:
-    """List the pages in VAULT."""
+@click.argument("vault", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
+def ls(vault: Path | None) -> None:
+    """List the pages in VAULT, or the registered projects when VAULT is omitted."""
+    if vault is None:
+        projects, notice = load_projects()
+        if notice:
+            click.echo(notice, err=True)
+        for entry in projects:
+            missing = "" if Path(entry["path"]).is_dir() else "\t(missing)"
+            click.echo(f"{entry['path']}{missing}")
+        return
     for page in list_pages(vault):
         click.echo(f"{page.path.relative_to(vault / 'wiki')}\t{page.type or '?'}\t{page.title or ''}")
 
