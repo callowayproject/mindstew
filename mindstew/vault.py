@@ -41,43 +41,40 @@ Edit this file freely; it is plain Markdown.
 """
 
 CONFIG_YAML = """# Per-vault mindstew configuration.
+# index/ and cache/ in this folder are derived data: safe to delete, rebuilt from sources/ and wiki/.
 """
 
-DERIVED_README = """# Derived data
-
-Everything in this folder can be rebuilt from `sources/` and `wiki/`.
-Deleting it is safe; it is regenerated on demand.
-"""
+STARTER_FILES = {"purpose.md": PURPOSE_MD, "schema.md": SCHEMA_MD, f"{CONFIG_DIR}/config.yaml": CONFIG_YAML}
+ESSENTIAL_DIRS = ("sources", *(f"wiki/{f}" for f in PAGE_TYPE_FOLDERS), f"{CONFIG_DIR}/skills")
+DERIVED_DIRS = (f"{CONFIG_DIR}/index", f"{CONFIG_DIR}/cache")
 
 
 class VaultExistsError(Exception):
-    """Raised when the target folder already contains a vault."""
+    """Raised when the target folder already contains a complete vault."""
 
 
 def is_vault(root: Path) -> bool:
-    """Return True if ``root`` already holds a mindstew vault."""
-    return (root / CONFIG_DIR).exists()
+    """Return True if ``root`` holds every essential vault file and folder (derived data is not required)."""
+    return all((root / d).is_dir() for d in ESSENTIAL_DIRS) and all((root / f).is_file() for f in STARTER_FILES)
 
 
 def create_vault(root: Path) -> None:
-    """Scaffold a fresh vault at ``root``.
+    """Scaffold a vault at ``root``, idempotently.
+
+    Existing files and folders are left untouched and only missing pieces are created, so
+    re-running continues a failed attempt.
 
     Args:
         root: Folder to create the vault in.
 
     Raises:
-        VaultExistsError: if ``root`` already contains a vault.
+        VaultExistsError: if ``root`` already contains a complete vault.
     """
     if is_vault(root):
         raise VaultExistsError(f"{root} already contains a vault")
-    (root / "sources").mkdir(parents=True, exist_ok=True)
-    for folder in PAGE_TYPE_FOLDERS:
-        (root / "wiki" / folder).mkdir(parents=True, exist_ok=True)
-    (root / "purpose.md").write_text(PURPOSE_MD, encoding="utf-8")
-    (root / "schema.md").write_text(SCHEMA_MD, encoding="utf-8")
-    config = root / CONFIG_DIR
-    (config / "skills").mkdir(parents=True)
-    for derived in ("index", "cache"):
-        (config / derived).mkdir()
-        (config / derived / "README.md").write_text(DERIVED_README, encoding="utf-8")
-    (config / "config.yaml").write_text(CONFIG_YAML, encoding="utf-8")
+    for d in (*ESSENTIAL_DIRS, *DERIVED_DIRS):
+        (root / d).mkdir(parents=True, exist_ok=True)
+    for name, content in STARTER_FILES.items():
+        path = root / name
+        if not path.exists():
+            path.write_text(content, encoding="utf-8")

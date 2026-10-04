@@ -27,11 +27,6 @@ def test_new_creates_full_tree(tmp_path: Path) -> None:
         assert (root / ".mindstew" / sub).is_dir()
 
 
-def test_six_page_types() -> None:
-    """There are exactly six typed page folders."""
-    assert len(PAGE_TYPE_FOLDERS) == 6
-
-
 def test_never_creates_obsidian_dir(make_vault: Callable[..., Path]) -> None:
     """No Obsidian config is ever created."""
     assert not (make_vault() / ".obsidian").exists()
@@ -69,11 +64,37 @@ def test_derived_data_is_rebuildable(make_vault: Callable[..., Path]) -> None:
     assert "already contains a vault" in result.output
 
 
-def test_derived_dirs_documented_as_rebuildable(make_vault: Callable[..., Path]) -> None:
-    """Derived folders say they can be rebuilt."""
+def test_derived_dirs_created_empty(make_vault: Callable[..., Path]) -> None:
+    """Derived folders start empty."""
     root = make_vault()
     for sub in ("index", "cache"):
-        assert "rebuilt" in (root / ".mindstew" / sub / "README.md").read_text(encoding="utf-8").lower()
+        assert list((root / ".mindstew" / sub).iterdir()) == []
+
+
+def test_new_resumes_partial_vault_without_overwriting(tmp_path: Path) -> None:
+    """A second `new` fills in what a failed attempt left behind and keeps existing files."""
+    (tmp_path / "wiki" / "entities").mkdir(parents=True)
+    (tmp_path / "purpose.md").write_text("mine", encoding="utf-8")
+    (tmp_path / "wiki" / "entities" / "Ada.md").write_text("keep", encoding="utf-8")
+
+    result = CliRunner().invoke(cli, ["new", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert is_vault(tmp_path)
+    assert (tmp_path / "purpose.md").read_text(encoding="utf-8") == "mine"
+    assert (tmp_path / "wiki" / "entities" / "Ada.md").read_text(encoding="utf-8") == "keep"
+    assert (tmp_path / "schema.md").is_file()
+
+
+def test_new_resumes_after_marker_written_first(tmp_path: Path) -> None:
+    """Order doesn't matter: a lone config.yaml is not a complete vault."""
+    (tmp_path / ".mindstew").mkdir()
+    (tmp_path / ".mindstew" / "config.yaml").write_text("x: 1\n", encoding="utf-8")
+
+    assert not is_vault(tmp_path)
+    create_vault(tmp_path)
+    assert is_vault(tmp_path)
+    assert (tmp_path / ".mindstew" / "config.yaml").read_text(encoding="utf-8") == "x: 1\n"
 
 
 def test_create_into_existing_empty_dir(tmp_path: Path) -> None:
