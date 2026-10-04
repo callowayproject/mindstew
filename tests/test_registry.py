@@ -112,3 +112,14 @@ def test_unwritable_registry_warns_but_command_succeeds(tmp_path: Path, monkeypa
     result = CliRunner().invoke(cli, ["new", str(tmp_path / "v")])
     assert result.exit_code == 0, result.output
     assert "could not update" in result.stderr
+
+
+def test_new_on_corrupt_registry_prints_notice_and_repairs(tmp_path: Path) -> None:
+    """`new` does not silently overwrite a corrupt registry: it says so on stderr."""
+    path = registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("{not json")
+    result = CliRunner().invoke(cli, ["new", str(tmp_path / "v")])
+    assert result.exit_code == 0, result.output
+    assert "unreadable" in result.stderr
+    assert json.loads(path.read_text())["projects"]

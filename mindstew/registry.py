@@ -52,10 +52,11 @@ def register(vault: Path) -> str | None:
         vault: The vault folder to record.
 
     Returns:
-        A notice if the registry could not be written, else None. Never raises.
+        A notice if the existing registry was unreadable (and is being replaced) or could not be written,
+        else None. Never raises.
     """
     resolved = str(vault.resolve())
-    entries, _ = load_projects()
+    entries, notice = load_projects()
     entries = [e for e in entries if e["path"] != resolved]
     entries.append({"path": resolved, "last_used": datetime.now(timezone.utc).isoformat()})
     path = registry_path()
@@ -64,4 +65,4 @@ def register(vault: Path) -> str | None:
         path.write_text(json.dumps({"projects": entries}, indent=2), encoding="utf-8")
     except OSError:
         return f"notice: could not update project registry {path}"
-    return None
+    return notice
