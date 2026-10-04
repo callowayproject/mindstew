@@ -16,6 +16,7 @@ dynamic = ["version"]
 license = { file = "LICENSE" }
 requires-python = ">=3.14"
 dependencies = [
+    "click>=8.5.0",
     "pydantic-settings>=2.8.1",
 ]
 authors = [
@@ -49,8 +50,8 @@ test = [
 docs = [
 ]
 
-#[project.scripts]
-#mindstew = mindstew.cli:cli
+[project.scripts]
+mindstew = "mindstew.cli:cli"
 
 [tool.hatch.version]
 path = "mindstew/__init__.py"
