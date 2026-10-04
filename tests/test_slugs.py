@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         ("Café Münster", "café-münster"),
         ("日本語 メモ", "日本語-メモ"),
         ("\uff21\uff44\uff41", "ada"),  # NFKC folds full-width forms
+        ("\u0939\u093f\u0928\u094d\u0926\u0940", "\u0939\u093f\u0928\u094d\u0926\u0940"),  # combining marks kept
         ("", ""),
         ("!!! ???", ""),
     ],
@@ -54,7 +55,7 @@ def test_collision_is_per_typed_folder_and_case_insensitive(make_vault: Callable
 def test_fallback_used_for_symbol_only_title(make_vault: Callable[..., Path]) -> None:
     """An unusable title falls back to the given name, then to 'untitled', and is still disambiguated."""
     root = make_vault()
-    assert new_page_path(root, "source", "???", fallback="Report Q3.pdf").name == "report-q3-pdf.md"
+    assert new_page_path(root, "source", "???", fallback="Report Q3.pdf").name == "report-q3.md"
     first = new_page_path(root, "source", "", fallback="")
     assert first.name == "untitled.md"
     first.write_text("x", encoding="utf-8")
@@ -65,3 +66,11 @@ def test_unknown_page_type_raises(make_vault: Callable[..., Path]) -> None:
     """Only the six page types are valid."""
     with pytest.raises(ValueError, match="page type"):
         new_page_path(make_vault(), "bogus", "x")
+
+
+def test_gap_in_suffixes_is_filled(make_vault: Callable[..., Path]) -> None:
+    """The lowest free suffix wins even when a higher one exists."""
+    root = make_vault()
+    for name in ("x.md", "x-3.md"):
+        (root / "wiki" / "concepts" / name).write_text("x", encoding="utf-8")
+    assert new_page_path(root, "concept", "x").name == "x-2.md"
