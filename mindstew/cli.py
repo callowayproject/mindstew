@@ -6,7 +6,7 @@ import click
 
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
-from mindstew.vault import VaultExistsError, create_vault
+from mindstew.vault import VaultExistsError, create_vault, is_vault
 
 
 @click.group()
@@ -23,6 +23,17 @@ def new(path: Path) -> None:
     except VaultExistsError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created vault at {path}")
+
+
+@cli.command(name="open")
+@click.argument("path", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def open_vault(path: Path) -> None:
+    """Adopt the existing folder PATH as a vault, adding only missing scaffolding."""
+    if is_vault(path):
+        click.echo(f"{path} is already a vault")
+        return
+    create_vault(path)
+    click.echo(f"Opened vault at {path}")
 
 
 @cli.command()
