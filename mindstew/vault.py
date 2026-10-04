@@ -1,5 +1,6 @@
 """Vault scaffolding: the on-disk layout of a mindstew vault."""
 
+import os
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -72,9 +73,9 @@ def _find_conflict(root: Path) -> Path | None:
         path = root
         for part in d.split("/"):
             path = path / part
-            if path.exists() and not path.is_dir():
+            if os.path.lexists(path) and not path.is_dir():
                 return path
-    return next((p for f in STARTER_FILES if (p := root / f).exists() and not p.is_file()), None)
+    return next((p for f in STARTER_FILES if (p := root / f) and os.path.lexists(p) and not p.is_file()), None)
 
 
 def is_vault(root: Path) -> bool:

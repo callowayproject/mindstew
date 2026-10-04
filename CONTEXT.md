@@ -5,7 +5,7 @@ A native macOS app that builds a personal wiki from documents and lets a local c
 ## Language
 
 **Vault**:
-An Obsidian-compatible folder holding `sources/`, `wiki/` (typed page folders `entities`, `concepts`, `sources`, `queries`, `comparisons`, `synthesis`), `purpose.md`, `schema.md` and `.mindstew/`. `mindstew new` is idempotent: it creates only what is missing, never overwrites, and refuses only when the vault is already complete.
+An Obsidian-compatible folder holding `sources/`, `wiki/` (typed page folders `entities`, `concepts`, `sources`, `queries`, `comparisons`, `synthesis`), `purpose.md`, `schema.md` and `.mindstew/`. `mindstew new` and `mindstew open` create only what is missing and never overwrite or touch existing files (no `.obsidian/` is ever created). `new` refuses when the vault is already complete; `open` adopts an existing folder and is a no-op on a complete vault. Both refuse, changing nothing, when an existing entry of the wrong kind blocks a scaffold path (a file named `wiki`, a dangling symlink, a directory named `purpose.md`).
 _Avoid_: project, workspace
 
 **Skill**:

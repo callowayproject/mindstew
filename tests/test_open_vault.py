@@ -78,6 +78,18 @@ def test_open_conflicting_entry_fails_cleanly(tmp_path: Path, name: str, is_dir:
     assert _snapshot(tmp_path) == before
 
 
+def test_open_dangling_symlink_fails_cleanly(tmp_path: Path) -> None:
+    """A dangling symlink on a scaffold path is a conflict, not a traceback."""
+    (tmp_path / "wiki").symlink_to(tmp_path / "missing")
+
+    result = CliRunner().invoke(cli, ["open", str(tmp_path)])
+
+    assert result.exit_code != 0
+    assert "wiki" in result.output
+    assert "Traceback" not in result.output
+    assert not (tmp_path / "sources").exists()
+
+
 def test_open_missing_path_fails_clearly(tmp_path: Path) -> None:
     """A nonexistent path is a clear error."""
     result = CliRunner().invoke(cli, ["open", str(tmp_path / "nope")])
