@@ -4,6 +4,10 @@ A native macOS app that builds a personal wiki from documents and lets a local c
 
 ## Language
 
+**Vault**:
+An Obsidian-compatible folder holding `sources/`, `wiki/` (typed page folders `entities`, `concepts`, `sources`, `queries`, `comparisons`, `synthesis`), `purpose.md`, `schema.md` and `.mindstew/`. `mindstew new` is idempotent: it creates only what is missing, never overwrites, and refuses only when the vault is already complete.
+_Avoid_: project, workspace
+
 **Skill**:
 A folder containing a `SKILL.md` (YAML frontmatter with `name` and `description`, plus Markdown instructions) that the chat agent can be told to follow.
 _Avoid_: plugin, command, prompt template

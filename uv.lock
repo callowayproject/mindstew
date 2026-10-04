@@ -411,6 +411,7 @@ name = "mindstew"
 source = { editable = "." }
 default-groups = ["dev", "docs", "test"]
 dependencies = [
+    { name = "click" },
     { name = "pydantic-settings" },
 ]
 
@@ -430,7 +431,10 @@ test = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "pydantic-settings", specifier = ">=2.8.1" }]
+requires-dist = [
+    { name = "click", specifier = ">=8.5.0" },
+    { name = "pydantic-settings", specifier = ">=2.8.1" },
+]
 
 [package.metadata.requires-dev]
 dev = [
