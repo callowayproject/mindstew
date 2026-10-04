@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from mindstew.pages import find_page, list_pages
 from mindstew.vault import VaultExistsError, create_vault
 
 
@@ -21,3 +22,27 @@ def new(path: Path) -> None:
     except VaultExistsError as exc:
         raise click.ClickException(str(exc)) from exc
     click.echo(f"Created vault at {path}")
+
+
+@cli.command()
+@click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def ls(vault: Path) -> None:
+    """List the pages in VAULT."""
+    for page in list_pages(vault):
+        click.echo(f"{page.path.relative_to(vault / 'wiki')}\t{page.type or '?'}\t{page.title or ''}")
+
+
+@cli.command()
+@click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument("page")
+def show(vault: Path, page: str) -> None:
+    """Print the metadata and body of PAGE (a path relative to wiki/) in VAULT."""
+    found = find_page(vault, page)
+    if found is None:
+        raise click.ClickException(f"no such page: {page}")
+    click.echo(f"type: {found.type or '?'}")
+    click.echo(f"title: {found.title or ''}")
+    click.echo(f"sources: {', '.join(found.sources)}")
+    click.echo(f"tags: {', '.join(found.tags)}")
+    click.echo()
+    click.echo(found.body.lstrip("\n"), nl=False)

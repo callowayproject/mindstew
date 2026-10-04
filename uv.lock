@@ -413,6 +413,7 @@ default-groups = ["dev", "docs", "test"]
 dependencies = [
     { name = "click" },
     { name = "pydantic-settings" },
+    { name = "pyyaml" },
 ]
 
 [package.dev-dependencies]
@@ -434,6 +435,7 @@ test = [
 requires-dist = [
     { name = "click", specifier = ">=8.5.0" },
     { name = "pydantic-settings", specifier = ">=2.8.1" },
+    { name = "pyyaml", specifier = ">=6.0" },
 ]
 
 [package.metadata.requires-dev]

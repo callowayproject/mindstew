@@ -5,7 +5,16 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from pathlib import Path
 
-PAGE_TYPE_FOLDERS = ("entities", "concepts", "sources", "queries", "comparisons", "synthesis")
+# The one place page types map to their typed folders under wiki/.
+PAGE_TYPES = {
+    "entity": "entities",
+    "concept": "concepts",
+    "source": "sources",
+    "query": "queries",
+    "comparison": "comparisons",
+    "synthesis": "synthesis",
+}
+PAGE_TYPE_FOLDERS = tuple(PAGE_TYPES.values())
 
 CONFIG_DIR = ".mindstew"
 
