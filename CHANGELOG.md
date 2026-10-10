@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.2 (2026-10-10)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.1...0.3.2)
+
+### Other
+
+- Tests: Remove unused `pytestmark` declarations. [c42c38b](https://github.com/callowayproject/mindstew/commit/c42c38bd05d56adc1a8999b8df0c4b3670bfcd07)
+
+- Config: Remove pytest-socket from uv.lock dependencies. [c6ede06](https://github.com/callowayproject/mindstew/commit/c6ede06938c2af44b4a1de1cc3d246126bf3bd9a)
+
+- Docs: add coding standards, testing seams, merge script and live provider smoke test. [6ccf5bc](https://github.com/callowayproject/mindstew/commit/6ccf5bccb6815cd94bb996b4bfc7534af7ff769b)
+
+- Config: Remove pytest-socket from test dependencies. [7900291](https://github.com/callowayproject/mindstew/commit/79002914056cba3dc80762bff2cec59921f65dc9)
+
+- Config: Update pre-commit Python version and disable qt-development plugin in Claude settings. [13dcef1](https://github.com/callowayproject/mindstew/commit/13dcef13a3ff5fd20db10fe2b0f541eb0cbbac4c)
+
 ## 0.3.1 (2026-10-10)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.0...0.3.1)
