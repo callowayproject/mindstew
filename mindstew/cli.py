@@ -4,6 +4,8 @@ from pathlib import Path
 
 import click
 
+from mindstew import adapter
+from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
 from mindstew.ingest_queue import list_items
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
@@ -11,6 +13,7 @@ from mindstew.providers import (
     ROLES,
     Header,
     Provider,
+    Route,
     add_provider,
     load_registry,
     remove_provider,
@@ -139,6 +142,29 @@ def provider_rm(provider_id: str) -> None:
     if not remove_provider(provider_id):
         raise click.ClickException(f"no such provider: {provider_id}")
     click.echo(f"Removed provider {provider_id}")
+
+
+@provider.command(name="test")
+@click.argument("provider_id")
+def provider_test(provider_id: str) -> None:
+    """Check that PROVIDER_ID is reachable and accepts its credentials.
+
+    Exit codes: 0 reachable, 1 error (unknown provider or other failure), 2 auth-failed, 3 unreachable.
+    """
+    registry, _ = load_registry()
+    if (p := registry.providers.get(provider_id)) is None:
+        raise click.ClickException(f"no such provider: {provider_id}")
+    try:
+        adapter.ping(Route("chat", p, ""))
+    except ProviderAuthError as e:
+        click.echo(f"auth-failed: {e}")
+        raise SystemExit(2) from e
+    except ProviderUnreachableError as e:
+        click.echo(f"unreachable: {e}")
+        raise SystemExit(3) from e
+    except ProviderError as e:
+        raise click.ClickException(str(e)) from e
+    click.echo(f"reachable: {provider_id}")
 
 
 @provider.command(name="set-route")

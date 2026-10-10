@@ -47,6 +47,44 @@ def fake_keyring() -> Iterator[dict[tuple[str, str], str]]:
     keyring.set_keyring(previous)
 
 
+class FakeAdapter:
+    """Deterministic stand-in for ``mindstew.adapter``: canned responses in order, and a call log."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple] = []  # (route, messages, output_type) per complete() call
+        self.pings: list = []  # routes passed to ping()
+        self._queue: list = []
+
+    def respond(self, *responses: object) -> None:
+        """Queue responses for upcoming ``complete`` calls; an Exception instance is raised instead of returned."""
+        self._queue.extend(responses)
+
+    def complete(self, route: object, messages: list, output_type: type) -> object:
+        """Log the call and return (or raise) the next canned response."""
+        self.calls.append((route, messages, output_type))
+        assert self._queue, "FakeAdapter: no canned response left; call fake_adapter.respond(...)"
+        response = self._queue.pop(0)
+        if isinstance(response, Exception):
+            raise response
+        return response
+
+    def ping(self, route: object) -> None:
+        """Log the ping; always succeeds."""
+        self.pings.append(route)
+
+
+@pytest.fixture
+def fake_adapter(monkeypatch: pytest.MonkeyPatch) -> FakeAdapter:
+    """Replace ``mindstew.adapter.complete``/``ping`` so no test reaches a provider.
+
+    Code under test must call them as ``adapter.complete(...)`` (module attribute), not import the names.
+    """
+    fake = FakeAdapter()
+    monkeypatch.setattr("mindstew.adapter.complete", fake.complete)
+    monkeypatch.setattr("mindstew.adapter.ping", fake.ping)
+    return fake
+
+
 @pytest.fixture
 def make_vault(tmp_path: Path) -> Callable[..., Path]:
     """Return a builder that creates a fresh vault under the test's temp dir and returns its root."""
