@@ -4,6 +4,7 @@ from pathlib import Path
 
 import click
 
+from mindstew.ingest_queue import list_items
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
 from mindstew.registry import load_projects, register
@@ -60,6 +61,17 @@ def ls(vault: Path | None) -> None:
         return
     for page in list_pages(vault):
         click.echo(f"{page.wiki_relpath(vault)}\t{page.type or '?'}\t{page.title or ''}")
+
+
+@cli.command()
+@click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
+def status(vault: Path) -> None:
+    """Show the ingest queue of VAULT: counts, then each item's status."""
+    items = list_items(vault)
+    counts = {s: sum(i.status == s for i in items) for s in ("queued", "running", "done", "failed")}
+    click.echo("  ".join(f"{s}: {n}" for s, n in counts.items()))
+    for item in items:
+        click.echo(f"{item.status}\t{item.path.name}\t{item.error or ''}".rstrip("\t"))
 
 
 @cli.command()
