@@ -7,5 +7,8 @@
     "anthropic-skills:pptx": "off",
     "anthropic-skills:pdf": "off",
     "anthropic-skills:morning": "off"
+  },
+  "enabledPlugins": {
+    "qt-development-skills@claude-plugins-official": false
   }
 }

@@ -221,3 +221,4 @@ site-packages
 reports
 *.env
 todo.txt
+.scratch
