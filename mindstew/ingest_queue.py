@@ -37,6 +37,24 @@ class QueueItem:
     attempts: int
 
 
+@dataclass(frozen=True)
+class ItemStatus:
+    """A queue row as shown by ``status``."""
+
+    id: int
+    path: Path
+    status: str
+    attempts: int
+    error: str | None
+
+
+def list_items(vault: Path) -> list[ItemStatus]:
+    """Return every queue entry in enqueue order."""
+    with closing(_connect(vault)) as conn:
+        rows = conn.execute("SELECT id, path, status, attempts, error FROM items ORDER BY id").fetchall()
+    return [ItemStatus(r[0], Path(r[1]), r[2], r[3], r[4]) for r in rows]
+
+
 def queue_db_path(vault: Path) -> Path:
     """Return the queue database path for ``vault``."""
     return vault / CONFIG_DIR / "index" / "ingest.db"
