@@ -126,7 +126,10 @@ def provider_add(
     parsed += [Header(n, None, secret=True) for n in secret_headers]
     key = click.prompt("API key", hide_input=True) if api_key else None
     secrets = {n: click.prompt(f"Value for header {n}", hide_input=True) for n in secret_headers}
-    notices = add_provider(Provider(provider_id, name or provider_id, kind, base_url, parsed), key, secrets)
+    try:
+        notices = add_provider(Provider(provider_id, name or provider_id, kind, base_url, parsed), key, secrets)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     for notice in notices:
         click.echo(notice, err=True)
     click.echo(f"Added provider {provider_id}")
@@ -271,14 +274,8 @@ def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
     drained = threading.Event()
     worker = Worker(vault, process, poll_interval=0.05)
 
-    def show(e: Event) -> None:
-        name = e.path.name if e.path else ""
-        if e.kind == "queue_drained":
-            drained.set()
-        else:
-            click.echo(f"{e.kind.removeprefix('item_')}: {name}" + (f" ({e.error})" if e.error else ""))
-
-    worker.subscribe(show)
+    worker.subscribe(_show_event(click.echo))
+    worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
     worker.start()
     try:
         drained.wait()
@@ -296,21 +293,27 @@ def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
 def ingest(vault: Path, path: Path | None, page: str | None) -> None:
     """Ingest PATH (a file or folder; default: everything in sources/) into VAULT, then run the queue."""
     overwrite = None
+    only: set[Path] = set()
     if page:
         found = find_page(vault, page)
         if found is None:
             raise click.ClickException(f"no such page: {page}")
         overwrite = found.path
+        root = vault.resolve()
+        for rel in found.sources:  # validate everything before enqueuing anything
+            if not isinstance(rel, str) or not (vault / rel).resolve().is_relative_to(root) or Path(rel).is_absolute():
+                raise click.ClickException(f"page source is not inside the vault: {rel!r}")
         for rel in found.sources:
             src = vault / rel
             if src.is_file():
                 enqueue(vault, src, force=True)
+                only.add(src.resolve())
             else:
                 click.echo(f"skipped (missing source): {rel}")
     else:
         for src in _collect(vault, path or vault / "sources"):
-            enqueue(vault, src)
-    _drain(vault, process_item(vault, overwrite))
+            enqueue(vault, src, retry_failed=True)
+    _drain(vault, process_item(vault, overwrite, only))
 
 
 class _Collector(FileSystemEventHandler):

@@ -19,6 +19,19 @@ PAGE_TYPE_FOLDERS = tuple(PAGE_TYPES.values())
 
 CONFIG_DIR = ".mindstew"
 
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` via a sibling temp file and ``os.replace``, so readers never see a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    except BaseException:
+        tmp.unlink(missing_ok=True)
+        raise
+
+
 PURPOSE_MD = """# Purpose
 
 Describe what this wiki is for. The ingest process reads this file to decide what matters.

@@ -7,6 +7,7 @@ it is set aside (``ingest.db.corrupt``) and recreated empty.
 
 import hashlib
 import sqlite3
+import time
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -14,6 +15,7 @@ from pathlib import Path
 from mindstew.vault import CONFIG_DIR
 
 MAX_ATTEMPTS = 3
+_CORRUPT_MARKERS = ("not a database", "malformed")
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS items (
@@ -60,18 +62,20 @@ def queue_db_path(vault: Path) -> Path:
     return vault / CONFIG_DIR / "index" / "ingest.db"
 
 
-def _connect(vault: Path) -> sqlite3.Connection:
+def _connect(vault: Path, timeout: float = 30) -> sqlite3.Connection:
     """Open the queue database, creating it (and the index dir) on demand and replacing it if corrupt."""
     db = queue_db_path(vault)
     db.parent.mkdir(parents=True, exist_ok=True)
     for _ in range(2):
-        conn = sqlite3.connect(db, isolation_level=None, timeout=30)
+        conn = sqlite3.connect(db, isolation_level=None, timeout=timeout)
         try:
             conn.execute(_SCHEMA)
             conn.execute("SELECT count(*) FROM items").fetchone()
-        except sqlite3.DatabaseError:
+        except sqlite3.DatabaseError as e:
             conn.close()
-            db.replace(db.with_name(db.name + ".corrupt"))
+            if isinstance(e, sqlite3.OperationalError) or not any(m in str(e) for m in _CORRUPT_MARKERS):
+                raise  # e.g. "database is locked": not corruption, never move the file
+            db.replace(db.with_name(f"{db.name}.corrupt.{time.time_ns()}"))
         else:
             return conn
     raise sqlite3.DatabaseError(f"cannot create ingest queue at {db}")  # pragma: no cover
@@ -85,7 +89,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def enqueue(vault: Path, path: Path, *, force: bool = False) -> bool:
+def enqueue(vault: Path, path: Path, *, force: bool = False, retry_failed: bool = False) -> bool:
     """Queue ``path`` for ingest unless its content is already queued, running, done or terminally failed.
 
     A changed file (different SHA256) is re-queued with its attempts reset.
@@ -94,6 +98,7 @@ def enqueue(vault: Path, path: Path, *, force: bool = False) -> bool:
         vault: The vault root.
         path: The source file to queue.
         force: Re-queue even if the content is unchanged (bypasses the hash cache).
+        retry_failed: Re-queue an unchanged item that ended terminally ``failed`` (resets its attempts).
 
     Returns:
         True if the file was queued, False if it was skipped.
@@ -102,8 +107,8 @@ def enqueue(vault: Path, path: Path, *, force: bool = False) -> bool:
     digest = _sha256(path)
     with closing(_connect(vault)) as conn:
         conn.execute("BEGIN IMMEDIATE")
-        row = conn.execute("SELECT sha256 FROM items WHERE path = ?", (resolved,)).fetchone()
-        if row and row[0] == digest and not force:
+        row = conn.execute("SELECT sha256, status FROM items WHERE path = ?", (resolved,)).fetchone()
+        if row and row[0] == digest and not force and not (retry_failed and row[1] == "failed"):
             conn.execute("COMMIT")
             return False
         conn.execute(
@@ -131,19 +136,27 @@ def next_item(vault: Path) -> QueueItem | None:
     return QueueItem(id=row[0], path=Path(row[1]), sha256=row[2], attempts=row[3]) if row else None
 
 
-def mark_done(vault: Path, item_id: int) -> None:
-    """Mark a running item done."""
+def mark_done(vault: Path, item_id: int, sha256: str | None = None) -> None:
+    """Mark a running item done; a no-op if it was re-queued meanwhile (``sha256`` is the claimed content hash)."""
     with closing(_connect(vault)) as conn:
-        conn.execute("UPDATE items SET status = 'done', error = NULL WHERE id = ?", (item_id,))
+        conn.execute(
+            "UPDATE items SET status = 'done', error = NULL WHERE id = ? AND status = 'running' "
+            "AND (? IS NULL OR sha256 = ?)",
+            (item_id, sha256, sha256),
+        )
 
 
-def mark_failed(vault: Path, item_id: int, error: str) -> None:
-    """Record a failure: back to queued, or terminal ``failed`` once ``MAX_ATTEMPTS`` is reached."""
+def mark_failed(vault: Path, item_id: int, error: str, sha256: str | None = None) -> None:
+    """Record a failure: back to queued, or terminal ``failed`` once ``MAX_ATTEMPTS`` is reached.
+
+    A no-op if the item was re-queued meanwhile (``sha256`` is the claimed content hash).
+    """
     with closing(_connect(vault)) as conn:
         conn.execute(
             "UPDATE items SET attempts = attempts + 1, error = ?, "
-            "status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'queued' END WHERE id = ?",
-            (error, MAX_ATTEMPTS, item_id),
+            "status = CASE WHEN attempts + 1 >= ? THEN 'failed' ELSE 'queued' END "
+            "WHERE id = ? AND status = 'running' AND (? IS NULL OR sha256 = ?)",
+            (error, MAX_ATTEMPTS, item_id, sha256, sha256),
         )
 
 
