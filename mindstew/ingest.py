@@ -76,9 +76,9 @@ def _validate(pages: list[GeneratedPage]) -> None:
                 raise IngestError(f"page {page.title!r} has non vault-relative source {s!r}")
 
 
-def _write(vault: Path, page: GeneratedPage, source: str) -> Path:
-    """Write ``page`` to a new free path in its typed folder and return the path."""
-    path = new_page_path(vault, page.type, page.title)
+def _write(vault: Path, page: GeneratedPage, source: str, overwrite: Path | None = None) -> Path:
+    """Write ``page`` to a new free path in its typed folder (or over ``overwrite``) and return the path."""
+    path = overwrite or new_page_path(vault, page.type, page.title)
     meta = {
         "type": page.type,
         "title": page.title.strip(),
@@ -87,13 +87,24 @@ def _write(vault: Path, page: GeneratedPage, source: str) -> Path:
     }
     text = f"---\n{yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)}---\n\n{page.body.strip()}\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("x", encoding="utf-8") as f:  # "x": never overwrite an existing page
+    with path.open("w" if overwrite else "x", encoding="utf-8") as f:  # "x": never overwrite an existing page
         f.write(text)
     return path
 
 
-def process_item(vault: Path) -> Callable[[QueueItem], None]:
+def _pick(pages: list[GeneratedPage], target: Path) -> GeneratedPage | None:
+    """Pick the generated page that replaces ``target``: same title, else the first of the same type."""
+    old = read_page(target)
+    title = (old.title or "").strip().casefold()
+    same_title = [p for p in pages if title and p.title.strip().casefold() == title]
+    return next(iter(same_title or [p for p in pages if p.type == old.type]), None)
+
+
+def process_item(vault: Path, overwrite: Path | None = None) -> Callable[[QueueItem], None]:
     """Return a ``process(item)`` for ``Worker`` that ingests ``.md``/``.txt`` sources into ``vault``.
+
+    With ``overwrite`` (an existing page, used by ``--reingest``) the generated page matching it is written over
+    it instead of to a new ``-N`` path; any other generated pages are still written as new pages.
 
     Raises (inside the returned callable) ``IngestError`` for no ingest route, an unsupported or unreadable
     source, or invalid model output; adapter errors propagate unchanged.
@@ -131,7 +142,8 @@ def process_item(vault: Path) -> Callable[[QueueItem], None]:
             GeneratedPages,
         )
         _validate(generated.pages)
-        paths = [_write(vault, p, source) for p in generated.pages]
+        target = _pick(generated.pages, overwrite) if overwrite else None
+        paths = [_write(vault, p, source, overwrite if p is target else None) for p in generated.pages]
         resolver = Resolver(list_pages(vault))
         for path in paths:
             for link in resolver.resolve_body(read_page(path).body):

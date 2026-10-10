@@ -1,12 +1,16 @@
 """The `mindstew` command line."""
 
+import shutil
+import threading
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import click
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest_queue import list_items
+from mindstew.ingest import TEXT_SUFFIXES, process_item
+from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
 from mindstew.providers import (
@@ -22,6 +26,12 @@ from mindstew.providers import (
 )
 from mindstew.registry import load_projects, register
 from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
+from mindstew.worker import Event, Worker
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+    from mindstew.ingest_queue import QueueItem
 
 
 @click.group()
@@ -212,3 +222,85 @@ def show(vault: Path, page: str) -> None:
         for link in links:
             dest = link.page.wiki_relpath(vault) if link.page else "(unresolved)"
             click.echo(f"  {link.target} -> {dest}")
+
+
+def _collect(vault: Path, root: Path) -> list[Path]:
+    """Stage the text sources under ``root`` (a file or folder) in ``vault/sources`` and return their paths.
+
+    Hidden files are skipped silently, unsupported ones are reported and skipped, and a clashing different
+    file already in ``sources/`` is kept (never overwritten) and reported.
+    """
+    sources = (vault / "sources").resolve()
+    root = root.resolve()
+    base = root.parent if root.is_file() else root
+    found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    staged = []
+    for path in found:
+        rel = path.relative_to(base)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        if path.suffix.lower() not in TEXT_SUFFIXES:
+            click.echo(f"skipped (unsupported): {rel}")
+            continue
+        if not path.is_relative_to(sources):
+            dest = sources / rel
+            if dest.exists() and dest.read_bytes() != path.read_bytes():
+                click.echo(f"skipped (exists in sources/, not overwritten): {rel}")
+                continue
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            if not dest.exists():
+                shutil.copy2(path, dest)
+            path = dest  # ruff: ignore[redefined-loop-name]
+        staged.append(path)
+    return staged
+
+
+def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
+    """Run the worker until ``queue_drained``, printing progress; exit non-zero if a pending item ended failed."""
+    pending = {i.id for i in list_items(vault) if i.status in ("queued", "running")}
+    if not pending:
+        click.echo("nothing to ingest")
+        return
+    drained = threading.Event()
+    worker = Worker(vault, process, poll_interval=0.05)
+
+    def show(e: Event) -> None:
+        name = e.path.name if e.path else ""
+        if e.kind == "queue_drained":
+            drained.set()
+        else:
+            click.echo(f"{e.kind.removeprefix('item_')}: {name}" + (f" ({e.error})" if e.error else ""))
+
+    worker.subscribe(show)
+    worker.start()
+    try:
+        drained.wait()
+    finally:
+        worker.stop()
+    failed = [i for i in list_items(vault) if i.id in pending and i.status == "failed"]
+    if failed:
+        raise click.ClickException(f"{len(failed)} item(s) failed")
+
+
+@cli.command()
+@click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.argument("path", required=False, type=click.Path(exists=True, path_type=Path))
+@click.option("--reingest", "page", metavar="PAGE", help="Regenerate PAGE (relative to wiki/) from its sources.")
+def ingest(vault: Path, path: Path | None, page: str | None) -> None:
+    """Ingest PATH (a file or folder; default: everything in sources/) into VAULT, then run the queue."""
+    overwrite = None
+    if page:
+        found = find_page(vault, page)
+        if found is None:
+            raise click.ClickException(f"no such page: {page}")
+        overwrite = found.path
+        for rel in found.sources:
+            src = vault / rel
+            if src.is_file():
+                enqueue(vault, src, force=True)
+            else:
+                click.echo(f"skipped (missing source): {rel}")
+    else:
+        for src in _collect(vault, path or vault / "sources"):
+            enqueue(vault, src)
+    _drain(vault, process_item(vault, overwrite))

@@ -85,7 +85,7 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def enqueue(vault: Path, path: Path) -> bool:
+def enqueue(vault: Path, path: Path, *, force: bool = False) -> bool:
     """Queue ``path`` for ingest unless its content is already queued, running, done or terminally failed.
 
     A changed file (different SHA256) is re-queued with its attempts reset.
@@ -93,6 +93,7 @@ def enqueue(vault: Path, path: Path) -> bool:
     Args:
         vault: The vault root.
         path: The source file to queue.
+        force: Re-queue even if the content is unchanged (bypasses the hash cache).
 
     Returns:
         True if the file was queued, False if it was skipped.
@@ -102,7 +103,7 @@ def enqueue(vault: Path, path: Path) -> bool:
     with closing(_connect(vault)) as conn:
         conn.execute("BEGIN IMMEDIATE")
         row = conn.execute("SELECT sha256 FROM items WHERE path = ?", (resolved,)).fetchone()
-        if row and row[0] == digest:
+        if row and row[0] == digest and not force:
             conn.execute("COMMIT")
             return False
         conn.execute(
