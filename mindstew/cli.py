@@ -28,6 +28,7 @@ def new(path: Path) -> None:
 
 
 def _register(path: Path) -> None:
+    """Record ``path`` in the project registry, echoing any notice to stderr."""
     if notice := register(path):
         click.echo(notice, err=True)
 
@@ -41,6 +42,7 @@ def open_vault(path: Path) -> None:
         fill_scaffold(path)
     except VaultConflictError as exc:
         raise click.ClickException(str(exc)) from exc
+    _register(path)
     click.echo(f"{path} is already a vault" if was_vault else f"Opened vault at {path}")
 
 

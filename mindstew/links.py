@@ -20,6 +20,7 @@ _WIKILINK = re.compile(r"\[\[([^\[\]]*)\]\]")
 
 
 def _key(name: str) -> str:
+    """Return the case-insensitive lookup key for a title or alias."""
     return name.strip().casefold()
 
 
