@@ -23,6 +23,10 @@ class Page:
     aliases: list[str] = field(default_factory=list)
     body: str = ""
 
+    def wiki_relpath(self, vault: Path) -> str:
+        """Return this page's path relative to the vault's ``wiki/`` folder."""
+        return str(self.path.relative_to(vault / "wiki"))
+
 
 def _str_list(value: object) -> list[str]:
     """Return the string items of a list, or [] for anything else."""

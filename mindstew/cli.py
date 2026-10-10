@@ -7,7 +7,7 @@ import click
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages
 from mindstew.registry import load_projects, register
-from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, is_vault
+from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
 
 
 @click.group()
@@ -36,16 +36,12 @@ def _register(path: Path) -> None:
 @click.argument("path", type=click.Path(exists=True, file_okay=False, path_type=Path))
 def open_vault(path: Path) -> None:
     """Adopt the existing folder PATH as a vault, adding only missing scaffolding."""
-    if is_vault(path):
-        _register(path)
-        click.echo(f"{path} is already a vault")
-        return
+    was_vault = is_vault(path)
     try:
-        create_vault(path)
+        fill_scaffold(path)
     except VaultConflictError as exc:
         raise click.ClickException(str(exc)) from exc
-    _register(path)
-    click.echo(f"Opened vault at {path}")
+    click.echo(f"{path} is already a vault" if was_vault else f"Opened vault at {path}")
 
 
 @cli.command()
@@ -61,7 +57,7 @@ def ls(vault: Path | None) -> None:
             click.echo(f"{entry['path']}{missing}")
         return
     for page in list_pages(vault):
-        click.echo(f"{page.path.relative_to(vault / 'wiki')}\t{page.type or '?'}\t{page.title or ''}")
+        click.echo(f"{page.wiki_relpath(vault)}\t{page.type or '?'}\t{page.title or ''}")
 
 
 @cli.command()
@@ -81,6 +77,6 @@ def show(vault: Path, page: str) -> None:
     links = Resolver(list_pages(vault)).resolve_body(found.body)
     if links:
         click.echo("\nlinks:")
-        for target, linked in links:
-            dest = str(linked.path.relative_to(vault / "wiki")) if linked else "(unresolved)"
-            click.echo(f"  {target} -> {dest}")
+        for link in links:
+            dest = link.page.wiki_relpath(vault) if link.page else "(unresolved)"
+            click.echo(f"  {link.target} -> {dest}")

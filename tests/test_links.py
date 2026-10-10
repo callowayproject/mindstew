@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner
 
 from mindstew.cli import cli
-from mindstew.links import Resolver, extract_links
+from mindstew.links import Link, Resolver, extract_links
 from mindstew.pages import list_pages, read_page
 
 if TYPE_CHECKING:
@@ -50,8 +50,8 @@ def test_resolves_case_insensitively_with_anchors_and_aliases(make_vault: Callab
         assert page is not None, target
         assert page.title == "Ada Lovelace"
     body = "[[ada lovelace|Ada]] [[Countess#Life]]"
-    assert [t for t, _ in r.resolve_body(body)] == ["ada lovelace", "Countess"]
-    assert all(p is not None for _, p in r.resolve_body(body))
+    assert [link.target for link in r.resolve_body(body)] == ["ada lovelace", "Countess"]
+    assert all(link.page is not None for link in r.resolve_body(body))
 
 
 def test_unresolved_never_raises(make_vault: Callable[..., Path]) -> None:
@@ -59,7 +59,7 @@ def test_unresolved_never_raises(make_vault: Callable[..., Path]) -> None:
     r = _vault_with_pages(make_vault, {"entities/ada.md": "---\ntitle: Ada\n---\n"})
     assert r.resolve("Nobody") is None
     assert r.resolve("") is None
-    assert r.resolve_body("[[Nobody]]") == [("Nobody", None)]
+    assert r.resolve_body("[[Nobody]]") == [Link("Nobody", None)]
 
 
 def test_duplicate_titles_resolve_to_first_path(make_vault: Callable[..., Path]) -> None:

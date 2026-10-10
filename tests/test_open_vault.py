@@ -96,3 +96,35 @@ def test_open_missing_path_fails_clearly(tmp_path: Path) -> None:
 
     assert result.exit_code != 0
     assert "does not exist" in result.output
+
+
+def test_open_adds_missing_derived_dirs(tmp_path: Path) -> None:
+    """A vault missing only .mindstew/index and cache gets them back, touching nothing else."""
+    CliRunner().invoke(cli, ["open", str(tmp_path)])
+    (tmp_path / "purpose.md").write_text("mine", encoding="utf-8")
+    (tmp_path / ".mindstew" / "index").rmdir()
+    (tmp_path / ".mindstew" / "cache").rmdir()
+    before = _snapshot(tmp_path)
+
+    result = CliRunner().invoke(cli, ["open", str(tmp_path)])
+
+    assert result.exit_code == 0, result.output
+    assert (tmp_path / ".mindstew" / "index").is_dir()
+    assert (tmp_path / ".mindstew" / "cache").is_dir()
+    assert {k: v for k, v in _snapshot(tmp_path).items() if k in before} == before
+    again = _snapshot(tmp_path)
+    CliRunner().invoke(cli, ["open", str(tmp_path)])
+    assert _snapshot(tmp_path) == again
+
+
+def test_open_leaves_obsidian_dir_byte_identical(tmp_path: Path) -> None:
+    """A pre-existing .obsidian/ is unchanged by open."""
+    _obsidian_vault(tmp_path)
+    (tmp_path / ".obsidian" / "plugins").mkdir()
+    (tmp_path / ".obsidian" / "plugins" / "x.json").write_bytes(b"\x00\x01")
+    before = {k: v for k, v in _snapshot(tmp_path).items() if k.startswith(".obsidian")}
+
+    CliRunner().invoke(cli, ["open", str(tmp_path)])
+
+    after = {k: v for k, v in _snapshot(tmp_path).items() if k.startswith(".obsidian")}
+    assert after == before
