@@ -45,7 +45,6 @@ dev = [
 ]
 test = [
     "pytest",
-    "pytest-socket",
     "coverage",
     "pytest-asyncio",
     "pytest-cov",
