@@ -20,7 +20,12 @@ class Page:
     title: str | None = None
     sources: list[str] = field(default_factory=list)
     tags: list[str] = field(default_factory=list)
+    aliases: list[str] = field(default_factory=list)
     body: str = ""
+
+    def wiki_relpath(self, vault: Path) -> str:
+        """Return this page's path relative to the vault's ``wiki/`` folder."""
+        return str(self.path.relative_to(vault / "wiki"))
 
 
 def _str_list(value: object) -> list[str]:
@@ -55,6 +60,7 @@ def read_page(path: Path) -> Page:
         title=title if isinstance(title, str) else None,
         sources=_str_list(meta.get("sources")),
         tags=_str_list(meta.get("tags")),
+        aliases=_str_list(meta.get("aliases")),
         body=body,
     )
 

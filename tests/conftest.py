@@ -11,6 +11,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+@pytest.fixture(autouse=True)
+def mindstew_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Point the machine-global registry at a temp dir so tests never touch real Application Support."""
+    home = tmp_path_factory.mktemp("mindstew-home")
+    monkeypatch.setenv("MINDSTEW_HOME", str(home))
+    return home
+
+
 @pytest.fixture
 def make_vault(tmp_path: Path) -> Callable[..., Path]:
     """Return a builder that creates a fresh vault under the test's temp dir and returns its root."""
