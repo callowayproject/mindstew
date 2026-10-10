@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.3.1 (2026-10-10)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.0...0.3.1)
+
+### Fixes
+
+- Fix: Address S1b review findings (queue races, reingest scope, provider hardening, strict schema). [5193955](https://github.com/callowayproject/mindstew/commit/5193955bfe0e30f10de67356744fffd8f6b45542)
+
+### Other
+
+- Feat: Add watch command for source-folder ingest (#58). [f5b1664](https://github.com/callowayproject/mindstew/commit/f5b1664d2ae19bf9f85086fa32debd1295155ade)
+
+- Feat: Add ingest CLI with folder import and --reingest (#57). [5541c62](https://github.com/callowayproject/mindstew/commit/5541c6285b57a8dc8f2ede34e99245c5063fc376)
+
+- Feat: Two-step structured ingest of Markdown/text sources (#56). [a23eedc](https://github.com/callowayproject/mindstew/commit/a23eedc4e5a1e7f49614bf29bf782967dc566c42)
+
+- Feat: OpenAI-compatible adapter, fake adapter fixture, provider test command (#53). [1f3558a](https://github.com/callowayproject/mindstew/commit/1f3558a5ff59f5b3d78557a1ca3ff15ddef58bf7)
+
+- Feat: Add provider registry, role routes and Keychain secrets (#52). [84b29ad](https://github.com/callowayproject/mindstew/commit/84b29adc6168b3860754d6bda39201b71afd4dba)
+
+- Feat: Add background ingest worker, events and status command (#55). [c25aae7](https://github.com/callowayproject/mindstew/commit/c25aae777b6178ac5fb7a1bce220a685eb139ce0)
+
+- Feat: Persistent serial ingest queue with SHA256 cache (#54). [90e942a](https://github.com/callowayproject/mindstew/commit/90e942a9d23425a876fc0073418b339c76ada638)
+
+### Updates
+
+- Updated CLAUDE. [f44092a](https://github.com/callowayproject/mindstew/commit/f44092acc6af663bc8537e92a6e1dddf84c143f5)
+
 ## 0.3.0 (2026-10-10)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.2.0...0.3.0)
