@@ -80,9 +80,6 @@ def _route(url: str, headers: list[Header] | None = None) -> Route:
     return Route("chat", provider, "gpt-x")
 
 
-pytestmark = pytest.mark.allow_hosts(["127.0.0.1"])
-
-
 def test_complete_returns_validated_object_and_sends_schema_and_auth(stub: Stub) -> None:
     """Adapter behaviour."""
     route = _route(stub.url, headers=[Header("X-Org", "acme")])

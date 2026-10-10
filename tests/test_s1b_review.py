@@ -46,8 +46,6 @@ if TYPE_CHECKING:
 
 from tests.test_adapter import stub  # ruff: ignore[unused-import]
 
-pytestmark = pytest.mark.allow_hosts(["127.0.0.1"])
-
 
 def _src(vault: Path, name: str = "a.md", text: str = "hello") -> Path:
     path = vault / "sources" / name
