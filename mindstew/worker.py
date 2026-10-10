@@ -9,6 +9,7 @@ import threading
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from mindstew.adapter import ProviderAuthError, ProviderUnreachableError
 from mindstew.ingest_queue import mark_done, mark_failed, next_item, recover_running
 
 if TYPE_CHECKING:
@@ -18,6 +19,9 @@ if TYPE_CHECKING:
     from mindstew.ingest_queue import QueueItem
 
 logger = logging.getLogger(__name__)
+
+RETRY_DELAY = 2.0  # seconds, times the attempt number, after a provider outage/auth failure (tests set 0)
+_OUTAGE_ERRORS = (ProviderUnreachableError, ProviderAuthError)
 
 
 @dataclass(frozen=True)
@@ -92,10 +96,12 @@ class Worker:
             except Exception as exc:  # ruff: ignore[blind-except] any process failure drives the retry cap
                 if self._cancelled.is_set():
                     return
-                mark_failed(self.vault, item.id, str(exc))
+                mark_failed(self.vault, item.id, str(exc), item.sha256)
                 self._emit(Event("item_failed", item.id, item.path, str(exc)))
+                if isinstance(exc, _OUTAGE_ERRORS):  # back off so an outage does not burn the retry cap at once
+                    self._stop.wait(RETRY_DELAY * (item.attempts + 1))
             else:
                 if self._cancelled.is_set():
                     return
-                mark_done(self.vault, item.id)
+                mark_done(self.vault, item.id, item.sha256)
                 self._emit(Event("item_finished", item.id, item.path))

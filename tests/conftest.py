@@ -47,6 +47,12 @@ def fake_keyring() -> Iterator[dict[tuple[str, str], str]]:
     keyring.set_keyring(previous)
 
 
+@pytest.fixture(autouse=True)
+def no_retry_delay(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the worker's outage backoff instant unless a test sets its own."""
+    monkeypatch.setattr("mindstew.worker.RETRY_DELAY", 0)
+
+
 class FakeAdapter:
     """Deterministic stand-in for ``mindstew.adapter``: canned responses in order, and a call log."""
 

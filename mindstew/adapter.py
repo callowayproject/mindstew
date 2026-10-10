@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 import httpx
 from pydantic import BaseModel, ValidationError
 
-from mindstew.providers import get_secret
+from mindstew.providers import SecretStoreError, get_secret
 
 if TYPE_CHECKING:
     from mindstew.providers import Route
@@ -37,13 +37,29 @@ def _headers(route: Route) -> dict[str, str]:
     """Build request headers: Bearer key from the keyring plus the provider's extra (possibly secret) headers."""
     p = route.provider
     headers = {}
-    if key := get_secret(p.id, "api_key"):
-        headers["Authorization"] = f"Bearer {key}"
-    for h in p.headers:
-        value = get_secret(p.id, f"header/{h.name}") if h.secret else h.value
-        if value is not None:
-            headers[h.name] = value
+    try:
+        if key := get_secret(p.id, "api_key"):
+            headers["Authorization"] = f"Bearer {key}"
+        for h in p.headers:
+            value = get_secret(p.id, f"header/{h.name}") if h.secret else h.value
+            if value is not None:
+                headers[h.name] = value
+    except SecretStoreError as e:
+        raise ProviderError(f"{p.id}: {e}") from e
     return headers
+
+
+def _strict(node: object) -> object:
+    """Make a JSON schema OpenAI-strict: every object forbids extra keys and lists all its properties as required."""
+    if isinstance(node, dict):
+        out: dict = {k: _strict(v) for k, v in node.items()}
+        if isinstance(props := out.get("properties"), dict):
+            out["additionalProperties"] = False
+            out["required"] = list(props)
+        return out
+    if isinstance(node, list):
+        return [_strict(v) for v in node]
+    return node
 
 
 def _request(route: Route, method: str, path: str, **kw: object) -> httpx.Response:
@@ -56,7 +72,7 @@ def _request(route: Route, method: str, path: str, **kw: object) -> httpx.Respon
     if resp.status_code in (401, 403):
         raise ProviderAuthError(f"{route.provider.id}: HTTP {resp.status_code}")
     if resp.is_error:
-        raise ProviderError(f"{route.provider.id}: HTTP {resp.status_code}: {resp.text[:200]}")
+        raise ProviderError(f"{route.provider.id}: HTTP {resp.status_code} {resp.reason_phrase}")
     return resp
 
 
@@ -94,7 +110,11 @@ def complete[T: BaseModel](route: Route, messages: list[dict[str, str]], output_
         "messages": messages,
         "response_format": {
             "type": "json_schema",
-            "json_schema": {"name": output_type.__name__, "schema": output_type.model_json_schema(), "strict": True},
+            "json_schema": {
+                "name": output_type.__name__,
+                "schema": _strict(output_type.model_json_schema()),
+                "strict": True,
+            },
         },
     }
     resp = _request(route, "POST", "/chat/completions", json=body)

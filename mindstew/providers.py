@@ -15,7 +15,7 @@ import yaml
 from keyring.errors import KeyringError
 
 from mindstew.registry import registry_path
-from mindstew.vault import CONFIG_DIR
+from mindstew.vault import CONFIG_DIR, atomic_write_text
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -119,14 +119,20 @@ def _parse_headers(raw: object, pid: str, notices: list[str]) -> list[Header]:
     return headers
 
 
-def load_registry() -> tuple[Registry, list[str]]:
+def load_registry(*, strict: bool = False) -> tuple[Registry, list[str]]:
     """Read ``providers.json``.
 
-    Never raises: a missing file is empty; an unreadable, corrupt or non-mapping file is empty with a notice;
-    malformed providers, headers and routes are dropped with a notice.
+    A missing file is empty; an unreadable, corrupt or non-mapping file is empty with a notice; malformed
+    providers, headers and routes are dropped with a notice.
+
+    Args:
+        strict: Used before writing: raise instead of treating an unreadable file as empty, so it is not overwritten.
 
     Returns:
         ``(registry, notices)``.
+
+    Raises:
+        ValueError: only when ``strict`` and the file is unreadable.
     """
     path = providers_path()
     if not path.exists():
@@ -136,6 +142,8 @@ def load_registry() -> tuple[Registry, list[str]]:
     except _READ_ERRORS:
         data = None
     if not isinstance(data, dict):
+        if strict:
+            raise ValueError(f"provider registry {path} is unreadable; fix or delete it first")
         return Registry(), [f"notice: provider registry {path} is unreadable; treating it as empty"]
     notices: list[str] = []
     providers: dict[str, Provider] = {}
@@ -172,9 +180,7 @@ def _save(registry: Registry) -> None:
         },
         "routes": {r: {"provider": p, "model": m} for r, (p, m) in registry.routes.items()},
     }
-    path = providers_path()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(data, indent=2), encoding="utf-8")
+    atomic_write_text(providers_path(), json.dumps(data, indent=2))
 
 
 def _secret_names(provider: Provider) -> list[str]:
@@ -182,12 +188,27 @@ def _secret_names(provider: Provider) -> list[str]:
     return ["api_key", *(f"header/{h.name}" for h in provider.headers if h.secret)]
 
 
+class SecretStoreError(Exception):
+    """The OS keyring could not be read (locked, unavailable, denied)."""
+
+
 def get_secret(provider_id: str, item: str) -> str | None:
-    """Return the keyring secret ``<provider_id>/<item>`` (``api_key`` or ``header/<name>``), or None."""
+    """Return the keyring secret ``<provider_id>/<item>`` (``api_key`` or ``header/<name>``), or None if unset.
+
+    Args:
+        provider_id: The provider's id.
+        item: ``api_key`` or ``header/<name>``.
+
+    Returns:
+        The secret, or None if unset.
+
+    Raises:
+        SecretStoreError: if the keyring itself fails.
+    """
     try:
         return keyring.get_password(KEYRING_SERVICE, f"{provider_id}/{item}")
-    except KeyringError:
-        return None
+    except KeyringError as e:
+        raise SecretStoreError(f"cannot read {provider_id}/{item} from the keyring: {e}") from e
 
 
 def add_provider(
@@ -209,14 +230,19 @@ def add_provider(
     secret_headers = {h.name for h in provider.headers if h.secret}
     if unknown := set(header_secrets or {}) - secret_headers:
         raise ValueError(f"not secret headers of {provider.id!r}: {', '.join(sorted(unknown))}")
-    registry, notices = load_registry()
+    registry, notices = load_registry(strict=True)
     provider.headers = [Header(h.name, None, True) if h.secret else h for h in provider.headers]
+    old = registry.providers.get(provider.id)
     registry.providers[provider.id] = provider
-    _save(registry)
     if api_key is not None:
         keyring.set_password(KEYRING_SERVICE, f"{provider.id}/api_key", api_key)
     for name, value in (header_secrets or {}).items():
         keyring.set_password(KEYRING_SERVICE, f"{provider.id}/header/{name}", value)
+    _save(registry)
+    if old is not None:  # drop Keychain items of secret headers this re-add no longer declares
+        for item in set(_secret_names(old)) - set(_secret_names(provider)):
+            with suppress(KeyringError):
+                keyring.delete_password(KEYRING_SERVICE, f"{provider.id}/{item}")
     return notices
 
 
@@ -302,7 +328,10 @@ def set_route(role: str, provider_id: str, model: str, vault: Path | None = None
         _save(registry)
         return
     path = _vault_config_path(vault)
-    config = _read_vault_config(vault, [])
+    problems: list[str] = []
+    config = _read_vault_config(vault, problems)
+    if problems:
+        raise ValueError(f"refusing to overwrite vault config {path}: it is unreadable or not a mapping")
     routes = config.get("routes")
     config["routes"] = {
         **(routes if isinstance(routes, dict) else {}),
@@ -313,5 +342,4 @@ def set_route(role: str, provider_id: str, model: str, vault: Path | None = None
     except _READ_ERRORS:
         old = ""
     header = "".join(line + "\n" for line in old.splitlines() if line.startswith("#"))  # keep leading comments
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(header + yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
+    atomic_write_text(path, header + yaml.safe_dump(config, sort_keys=False))
