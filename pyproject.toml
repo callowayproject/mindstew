@@ -45,7 +45,6 @@ dev = [
 ]
 test = [
     "pytest",
-    "pytest-socket",
     "coverage",
     "pytest-asyncio",
     "pytest-cov",
@@ -93,6 +92,9 @@ addopts = [
     "--cov-report=term",
     "--cov-report=html",
     "--cov-report=html",
+]
+markers = [
+    "live: calls a real provider; skipped unless MINDSTEW_LIVE_* env vars are set",
 ]
 norecursedirs = [
     ".*",
