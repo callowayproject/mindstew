@@ -21,6 +21,12 @@ Implement tickets as a branch from the slice branch. PRs for each ticket should 
 
 Other tickets merge into the slice branch while you work. Before pushing or opening a PR, `git fetch` and merge the slice branch into yours, then run the full `uv run pytest` (not just the new tests) to catch dropped calls from concurrent changes.
 
+Merge a finished ticket branch into the slice with `tools/merge-into-slice.sh <ticket-branch> <slice-branch>`. Spawn a merger agent only when it reports a conflict.
+
+## Testing
+
+Fixtures, fakes and the rules they depend on: `docs/agents/testing.md`. Review rules: `CODING_STANDARDS.md`.
+
 ## Use grill-with-ui
 
 When you want to use the `grilling` skill, use the `grill-with-ui` skill instead. It provides a UI to the grilling skill. This includes wayfinder tickets labelled `wayfinder:grilling` (see `docs/agents/issue-tracker.md`) — open them with `grill-with-ui`, not the plain terminal `grilling` skill.

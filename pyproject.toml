@@ -93,6 +93,9 @@ addopts = [
     "--cov-report=html",
     "--cov-report=html",
 ]
+markers = [
+    "live: calls a real provider; skipped unless MINDSTEW_LIVE_* env vars are set",
+]
 norecursedirs = [
     ".*",
     "build",
