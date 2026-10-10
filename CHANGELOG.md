@@ -1,5 +1,43 @@
 # Changelog
 
+## 0.3.0 (2026-10-10)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.2.0...0.3.0)
+
+### Fixes
+
+- Fix: Keep registering the vault in open after the scaffold refactor. [b611ba8](https://github.com/callowayproject/mindstew/commit/b611ba8c1666abe6dede372582f4102a6e49cc0a)
+
+- Fix: Address PR #49 review findings (open fills derived dirs, Link type, cleanups). [d60e7b7](https://github.com/callowayproject/mindstew/commit/d60e7b7b873bb6ccbf6cb3e56a243f89857d0fa6)
+
+- Fix: Warn instead of silently overwriting a corrupt registry on new/open (#36). [bae1404](https://github.com/callowayproject/mindstew/commit/bae140444c1f4fea27979e43da4f9754baf8f5ee)
+
+- Fix: Treat dangling symlinks as scaffold conflicts; update Vault glossary (#33). [e6779cf](https://github.com/callowayproject/mindstew/commit/e6779cf2e5c5fda03006f05a4519ca8a0e8e5e89)
+
+- Fix: Report conflicting entries instead of crashing in open/new (#33). [16cc6f5](https://github.com/callowayproject/mindstew/commit/16cc6f58210192656565cb6132e083574514de56)
+
+- Fix: Keep combining marks, lowercase not casefold, drop fallback extension (#35). [54899fc](https://github.com/callowayproject/mindstew/commit/54899fc65b2d800a50950b69ec4b94d37770b241)
+
+### New
+
+- Add: Machine-global project registry; ls without a path lists projects (#36). [69f63a7](https://github.com/callowayproject/mindstew/commit/69f63a7fbf40126e48849d1c31c24e3a866f424a)
+
+- Add: Non-destructive vault adoption via mindstew open (#33). [57a4d4c](https://github.com/callowayproject/mindstew/commit/57a4d4c7cd7353a139f2ba4f1c6bad81c6f98cc7)
+
+- Add: Filename byte cap and Windows reserved-name handling for slugs (#35). [95b8ac8](https://github.com/callowayproject/mindstew/commit/95b8ac8f206d8777c7de6247909e763301fb7516)
+
+- Add: Page slugs with numeric disambiguation (#35). [72bedcd](https://github.com/callowayproject/mindstew/commit/72bedcd520abc5cf8e18b00fa7e89edfe0c99450)
+
+- Add: Shared wikilink resolver with alias support; show prints link resolution (#34). [6da9bae](https://github.com/callowayproject/mindstew/commit/6da9baeae0884deac101ea12045eeca54843b783)
+
+### Updates
+
+- Update: Bump Python versions in test matrix to 3.13 and 3.14. [a494cef](https://github.com/callowayproject/mindstew/commit/a494cefd516185307eb83ab35aba9c70a0fdbfdb)
+
+- Remove: GitHub Actions workflows for publishing docs and previews. [aaae042](https://github.com/callowayproject/mindstew/commit/aaae042987ae2a6d5bd57fa7db0b11c491259bbb)
+
+- Change: Tighten resolver tests and show link output (#34). [c4caac5](https://github.com/callowayproject/mindstew/commit/c4caac548414b02d1d0fcd5fe398c52b46fdc73e)
+
 ## 0.2.0 (2026-10-10)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.1.0...0.2.0)
