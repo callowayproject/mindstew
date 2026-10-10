@@ -1,17 +1,26 @@
 """The one shared wikilink resolver (used by show, and later graph, lint and chat)."""
 
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
 
     from mindstew.pages import Page
 
+
+class Link(NamedTuple):
+    """A wikilink target and the page it resolves to (None if unresolved)."""
+
+    target: str
+    page: Page | None
+
+
 _WIKILINK = re.compile(r"\[\[([^\[\]]*)\]\]")
 
 
 def _key(name: str) -> str:
+    """Return the case-insensitive lookup key for a title or alias."""
     return name.strip().casefold()
 
 
@@ -34,16 +43,18 @@ class Resolver:
     def __init__(self, pages: Iterable[Page]) -> None:
         pages = list(pages)
         self._by_name: dict[str, Page] = {}
-        # ponytail: two passes keep "title beats alias" without a priority field
-        for names in (lambda p: [p.title] if p.title else [], lambda p: p.aliases):
-            for page in pages:
-                for name in names(page):
-                    self._by_name.setdefault(_key(name), page)
+        # Two passes keep "title beats alias" without a priority field.
+        for page in pages:
+            if page.title:
+                self._by_name.setdefault(_key(page.title), page)
+        for page in pages:
+            for alias in page.aliases:
+                self._by_name.setdefault(_key(alias), page)
 
     def resolve(self, target: str) -> Page | None:
         """Return the page ``target`` points at, or None."""
         return self._by_name.get(_key(target))
 
-    def resolve_body(self, body: str) -> list[tuple[str, Page | None]]:
-        """Return every link target in ``body`` paired with its page (None if unresolved)."""
-        return [(t, self.resolve(t)) for t in extract_links(body)]
+    def resolve_body(self, body: str) -> list[Link]:
+        """Return every link in ``body`` with its resolved page (None if unresolved)."""
+        return [Link(t, self.resolve(t)) for t in extract_links(body)]
