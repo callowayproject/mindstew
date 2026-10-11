@@ -8,6 +8,14 @@ A native macOS app that builds a personal wiki from documents and lets a local c
 An Obsidian-compatible folder holding `sources/`, `wiki/` (typed page folders `entities`, `concepts`, `sources`, `queries`, `comparisons`, `synthesis`), `purpose.md`, `schema.md` and `.mindstew/`. `mindstew new` and `mindstew open` create only what is missing and never overwrite or touch existing files (no `.obsidian/` is ever created). `new` refuses when the vault is already complete; `open` adopts an existing folder and is a no-op on a complete vault. Both refuse, changing nothing, when an existing entry of the wrong kind blocks a scaffold path (a file named `wiki`, a dangling symlink, a directory named `purpose.md`).
 _Avoid_: project, workspace
 
+**Wikilink target**:
+The text inside `[[...]]` that names a page. The resolver tries the full text before any `|display` (a `\|` counts as `|`), then the form stripped at the first `#`, `|` or `^`; for each text it checks page names in order: filename stem, title, alias, all case-insensitive. Ties go to the first page by sorted path.
+_Avoid_: link text, slug
+
+**Page name**:
+A string a wikilink target can match: a filename stem, a title or an alias. Stems match bare (`ada`), not folder-qualified.
+_Avoid_: key
+
 **Skill**:
 A folder containing a `SKILL.md` (YAML frontmatter with `name` and `description`, plus Markdown instructions) that the chat agent can be told to follow.
 _Avoid_: plugin, command, prompt template
