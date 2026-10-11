@@ -1,6 +1,6 @@
 # Coding standards
 
-Read during review, not implementation. Judgement calls only: anything ruff, mypy, pydoclint or pre-commit enforces is not listed here. The domain vocabulary is in `CONTEXT.md`.
+Read during review, not implementation. Judgement calls only: anything ruff, mypy, pydoclint or pre-commit enforces is not listed here. The domain vocabulary is in `GLOSSARY.md`.
 
 ## Persisted state
 
