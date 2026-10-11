@@ -7,7 +7,7 @@ import pytest
 from click.testing import CliRunner
 
 from mindstew.cli import cli
-from mindstew.registry import registry_path
+from mindstew.registry import register, registry_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -63,9 +63,43 @@ def test_ls_tolerates_vault_folder_that_no_longer_exists(tmp_path: Path) -> None
     assert "(missing)" in _ls()
 
 
-def test_missing_registry_lists_nothing() -> None:
-    """No registry file yet is a normal empty state."""
-    assert not _ls()
+def test_missing_registry_lists_nothing_but_hints_on_stderr() -> None:
+    """No registry file yet is a normal empty state: stdout empty, hint on stderr."""
+    result = CliRunner().invoke(cli, ["ls"])
+    assert result.exit_code == 0
+    assert not result.stdout
+    assert "No projects yet. Create one with mindstew new <path>." in result.stderr
+
+
+def test_empty_registry_hints_and_nonempty_does_not(tmp_path: Path) -> None:
+    """An empty projects list hints; a registered project suppresses the hint."""
+    path = registry_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('{"projects": []}')
+    assert "No projects yet" in CliRunner().invoke(cli, ["ls"]).stderr
+    CliRunner().invoke(cli, ["new", str(tmp_path / "v")])
+    assert "No projects yet" not in CliRunner().invoke(cli, ["ls"]).stderr
+
+
+@pytest.mark.parametrize("fail", ["write_text", "replace"])
+def test_failed_write_keeps_old_registry_and_leaves_no_temp(
+    fail: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An OSError mid-write leaves projects.json intact, no stray temp file, and returns the notice."""
+    CliRunner().invoke(cli, ["new", str(tmp_path / "v1")])
+    path = registry_path()
+    before = path.read_text()
+
+    def boom(*_args: object, **_kwargs: object) -> None:
+        raise OSError
+
+    if fail == "replace":
+        monkeypatch.setattr("mindstew.registry.os.replace", boom)
+    else:
+        monkeypatch.setattr("pathlib.Path.write_text", boom)
+    assert "could not update" in (register(tmp_path / "v2") or "")
+    assert path.read_text() == before
+    assert [p.name for p in path.parent.iterdir()] == ["projects.json"]
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,7 @@ import unicodedata
 from pathlib import PurePath
 from typing import TYPE_CHECKING
 
+from mindstew.pages import wiki_root
 from mindstew.vault import PAGE_TYPES
 
 if TYPE_CHECKING:
@@ -31,7 +32,7 @@ def new_page_path(vault: Path, page_type: str, title: str, fallback: str = "") -
     if page_type not in PAGE_TYPES:
         msg = f"unknown page type: {page_type!r}"
         raise ValueError(msg)
-    folder = vault / "wiki" / PAGE_TYPES[page_type]
+    folder = wiki_root(vault) / PAGE_TYPES[page_type]
     base = slugify(title) or slugify(PurePath(fallback).stem) or "untitled"
     if base in WINDOWS_RESERVED:
         base += "-page"

@@ -13,6 +13,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from mindstew.pages import Page
+
 
 def _write(path: Path, text: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -23,7 +25,43 @@ def _write(path: Path, text: str) -> Path:
 def test_extract_links_forms_and_dedupe() -> None:
     """Display text, heading and block anchors are stripped; order is kept and duplicates dropped."""
     body = "[[Ada]] [[Ada Lovelace|Ada]] [[Babbage#History]] [[ada]] [[Note^blk]] [[  ]] [[#Local]]"
-    assert extract_links(body) == ["Ada", "Ada Lovelace", "Babbage", "ada", "Note"]
+    assert extract_links(body) == ["Ada", "Ada Lovelace", "Babbage#History", "ada", "Note^blk"]
+
+
+def test_extract_links_ignores_code() -> None:
+    """Inline code (single and double backtick) and backtick/tilde fences hide links; later prose does not."""
+    body = "`[[x]]` ``a [[d]] b`` [[z]]\n```python\n[[y]]\n```\n~~~\n[[t]]\n~~~\n[[after]]\n"
+    body += "````\n[[inner]]\n```\n[[still]]\n"
+    assert extract_links(body) == ["z", "after"]
+    assert extract_links("[[a]]\n```\n[[b]]\nno close [[c]]") == ["a"]
+
+
+def test_extract_links_raw_targets_and_malformed() -> None:
+    r"""Escaped pipes separate display text; titles keep `#`; empty and lone-backslash links never raise."""
+    assert extract_links(r"[[A\|b]] [[C# notes]] [[C# notes|shown]] [[]] [[\]] [[#x]]") == ["A", "C# notes", "\\"]
+
+
+def test_stem_title_alias_tiers_and_anchor_fallback(make_vault: Callable[..., Path]) -> None:
+    """Stem beats title beats alias; full text beats the anchor-stripped text; folder-qualified targets miss."""
+    r = _vault_with_pages(
+        make_vault,
+        {
+            "concepts/foo.md": "---\ntitle: Other\n---\n",
+            "entities/y.md": "---\ntitle: foo\n---\n",
+            "entities/ada.md": "",
+            "entities/c-notes.md": "---\ntitle: C# notes\n---\n",
+            "entities/c.md": "---\ntitle: C\n---\n",
+            "concepts/z.md": "---\ntitle: Z\naliases: [yy]\n---\n",
+            "entities/yy.md": "---\ntitle: yy\n---\n",
+        },
+    )
+    assert r.resolve("foo").path.name == "foo.md"
+    assert r.resolve("Ada").path.name == "ada.md"
+    assert r.resolve("C# notes").path.name == "c-notes.md"
+    assert r.resolve("C#x").path.name == "c.md"
+    assert r.resolve("z^blk").path.name == "z.md"
+    assert r.resolve("yy").path.name == "yy.md"
+    assert r.resolve("entities/ada") is None
 
 
 def test_frontmatter_links_field_is_ignored(tmp_path: Path) -> None:
@@ -50,7 +88,7 @@ def test_resolves_case_insensitively_with_anchors_and_aliases(make_vault: Callab
         assert page is not None, target
         assert page.title == "Ada Lovelace"
     body = "[[ada lovelace|Ada]] [[Countess#Life]]"
-    assert [link.target for link in r.resolve_body(body)] == ["ada lovelace", "Countess"]
+    assert [link.target for link in r.resolve_body(body)] == ["ada lovelace", "Countess#Life"]
     assert all(link.page is not None for link in r.resolve_body(body))
 
 
@@ -101,5 +139,25 @@ def test_show_prints_resolved_and_unresolved_links(make_vault: Callable[..., Pat
     _write(root / "wiki" / "entities" / "babbage.md", "---\ntype: entity\ntitle: Babbage\n---\n")
     out = CliRunner().invoke(cli, ["show", str(root), "entities/ada"])
     assert out.exit_code == 0, out.output
-    assert "Babbage -> entities/babbage.md" in out.output
+    assert "Babbage#Work -> entities/babbage.md" in out.output
     assert "Ghost -> (unresolved)" in out.output
+
+
+def test_show_reads_each_page_once(make_vault: Callable[..., Path], monkeypatch: pytest.MonkeyPatch) -> None:
+    """`show` finds its page among the pages it already read for the resolver."""
+    root = make_vault()
+    _write(root / "wiki" / "entities" / "ada.md", "---\ntype: entity\n---\n[[babbage]]\n")
+    _write(root / "wiki" / "entities" / "babbage.md", "")
+    calls: list[Path] = []
+    real = read_page
+
+    def counting(path: Path) -> Page:
+        calls.append(path)
+        return real(path)
+
+    monkeypatch.setattr("mindstew.pages.read_page", counting)
+    out = CliRunner().invoke(cli, ["show", str(root), "entities/ada"])
+    assert out.exit_code == 0, out.output
+    assert "babbage -> entities/babbage.md" in out.output
+    assert len(calls) == len(set(calls)) == 2
+    assert CliRunner().invoke(cli, ["show", str(root), "../x"]).exit_code != 0
