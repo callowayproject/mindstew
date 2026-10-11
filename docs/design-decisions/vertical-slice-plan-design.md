@@ -65,8 +65,8 @@ Coverage check to perform when issues are written: every story 1-124 maps to exa
 
 ## Verified facts
 
-- The repo is greenfield: `mindstew/` contains only `__init__.py`, `tests/` is empty, `prototype/three_pane_ui_prototype.py` is a throwaway Qt prototype; `pyproject.toml` has only `pydantic-settings` as a dependency and a commented `mindstew.cli:cli` script entry; Python >= 3.14.
-- Issues live in GitHub Issues; the map is #1, spec is #30 with no comments; wayfinding conventions (sub-issues, native dependencies, `Blocked by:` fallback) are in `docs/agents/issue-tracker.md`.
+- The repo is greenfield: `../../mindstew` contains only `__init__.py`, `tests/` is empty, `prototype/three_pane_ui_prototype.py` is a throwaway Qt prototype; `pyproject.toml` has only `pydantic-settings` as a dependency and a commented `mindstew.cli:cli` script entry; Python >= 3.14.
+- Issues live in GitHub Issues; the map is #1, spec is #30 with no comments; wayfinding conventions (sub-issues, native dependencies, `Blocked by:` fallback) are in `../agents/issue-tracker.md`.
 - #30 itself lists a 16-item horizontal decomposition as follow-ups; this plan replaces it.
 
 ## Risks
