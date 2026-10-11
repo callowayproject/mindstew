@@ -26,7 +26,7 @@ The vault is already a plain Markdown folder, Obsidian-compatible (#2). Users ne
 
 ## Verified facts
 
-- Explored repo docs: `docs/` holds sibling design docs for #19–#23; `CONTEXT.md` previously defined only Skill and Skill source.
+- Explored repo docs: `..` holds sibling design docs for #19–#23; `CONTEXT.md` previously defined only Skill and Skill source.
 
 ## Risks
 

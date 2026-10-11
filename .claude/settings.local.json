@@ -9,6 +9,7 @@
     "anthropic-skills:morning": "off"
   },
   "enabledPlugins": {
-    "qt-development-skills@claude-plugins-official": false
+    "qt-development-skills@claude-plugins-official": false,
+    "technical-writer@sjungling-plugins": true
   }
 }

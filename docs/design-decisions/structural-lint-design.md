@@ -17,7 +17,7 @@ Structural lint is a deterministic, no-LLM pass over the vault's wiki files that
 
 ## Locked decisions
 
-1. **Check set (Q1 → B).** Upstream's three — `orphan`, `broken-link`, `no-outlinks` — plus schema checks: missing/invalid required field (`type`, `title`, `sources`), unknown `type`, type vs. typed-folder mismatch, `sources[]` entry pointing at a missing file, duplicate `title` (ambiguous wikilink target), and unparseable/malformed frontmatter as its own finding. Root/structural files (`index.md`, `log.md`, `overview.md`, `purpose.md`, `schema.md`) are exempt per #3. Rejected: (A) upstream's three only — leaves #3's rules unenforced; (C) adding style checks (slug/filename mismatch, tags not a list, empty body) — cosmetic, and #3 says malformed optional fields are tolerated, so they would be noise. Every check must skip, never throw, on absent/null/scalar/non-mapping frontmatter fields.
+1. **Check set (Q1 → B).** Upstream's three — `orphan`, `broken-link`, `no-outlinks` — plus schema checks: missing/invalid required field (`type`, `title`, `sources`), unknown `type`, type vs. typed-folder mismatch, `sources[]` entry pointing at a missing file, duplicate `title` (ambiguous wikilink target), and unparseable/malformed frontmatter as its own finding. Root/structural files (`../index.md`, `log.md`, `overview.md`, `purpose.md`, `schema.md`) are exempt per #3. Rejected: (A) upstream's three only — leaves #3's rules unenforced; (C) adding style checks (slug/filename mismatch, tags not a list, empty body) — cosmetic, and #3 says malformed optional fields are tolerated, so they would be noise. Every check must skip, never throw, on absent/null/scalar/non-mapping frontmatter fields.
 2. **No auto-fix in v1 (Q3 → C).** All findings are report-only. This narrows #19's wording that structural lint is "mechanically auto-fixable"; that claim is superseded by this decision. Rejected: (A) restricted deterministic fixes (case/slug link rewrite, set type from folder, default fields) and (B) additionally upstream's content-creating fixes (stub page for broken link, append wikilink to orphan) — the user chose not to have the app write into Obsidian-shared Markdown unprompted. The deterministic fix candidates from A are the natural first thing to add if this is reopened.
 
 ## Routine choices
@@ -28,7 +28,7 @@ Structural lint is a deterministic, no-LLM pass over the vault's wiki files that
 
 ## Verified facts
 
-- Upstream llm_wiki structural lint is `orphan | broken-link | no-outlinks`, runs in a Web Worker, is manual only, has non-persistent incrementing IDs (each run clears and repopulates), and has fixes `appendWikilink`, `ensureBrokenLinkStub`, `rewriteWikilinkTarget` (from #19's research, `docs/review-system-design.md`).
+- Upstream llm_wiki structural lint is `orphan | broken-link | no-outlinks`, runs in a Web Worker, is manual only, has non-persistent incrementing IDs (each run clears and repopulates), and has fixes `appendWikilink`, `ensureBrokenLinkStub`, `rewriteWikilinkTarget` (from #19's research, `review-system-design.md`).
 - #3 requires `type`/`title`/`sources[]`, six types in typed folders, case-insensitive title wikilinks with alias support, and tolerant reads everywhere.
 
 ## Risks

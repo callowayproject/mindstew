@@ -222,3 +222,8 @@ reports
 *.env
 todo.txt
 .scratch
+
+### VitePress ###
+node_modules/
+docs/.vitepress/cache
+docs/.vitepress/dist
