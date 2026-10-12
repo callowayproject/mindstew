@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 from mindstew.cli import cli
 from mindstew.links import Link, Resolver, extract_links
-from mindstew.pages import list_pages, read_page
+from mindstew.pages import describe_page, list_pages, read_page
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -161,3 +161,22 @@ def test_show_reads_each_page_once(make_vault: Callable[..., Path], monkeypatch:
     assert "babbage -> entities/babbage.md" in out.output
     assert len(calls) == len(set(calls)) == 2
     assert CliRunner().invoke(cli, ["show", str(root), "../x"]).exit_code != 0
+
+
+def test_describe_page_missing_returns_none(make_vault: Callable[..., Path]) -> None:
+    """A name that is not a page yields None, including traversal."""
+    root = make_vault()
+    assert describe_page(root, "entities/nope") is None
+    assert describe_page(root, "../x") is None
+
+
+def test_describe_page_with_malformed_frontmatter_still_resolves_links(make_vault: Callable[..., Path]) -> None:
+    """Broken frontmatter does not stop the body's links being resolved."""
+    root = make_vault()
+    _write(root / "wiki" / "entities" / "ada.md", "---\ntitle: [unclosed\n---\n[[babbage]] [[Ghost]]\n")
+    _write(root / "wiki" / "entities" / "babbage.md", "")
+    found = describe_page(root, "entities/ada")
+    assert found is not None
+    page, links = found
+    assert page.path.name == "ada.md"
+    assert [(link.target, link.page is not None) for link in links] == [("babbage", True), ("Ghost", False)]

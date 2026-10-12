@@ -13,8 +13,7 @@ from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
 from mindstew.ingest import drain, ingest_path, process_item, show_event, stage
 from mindstew.ingest_queue import enqueue, list_items
-from mindstew.links import Resolver
-from mindstew.pages import find_page, list_pages, page_file
+from mindstew.pages import describe_page, find_page, list_pages
 from mindstew.providers import (
     ROLES,
     Header,
@@ -214,18 +213,16 @@ def status(vault: Path) -> None:
 @click.argument("page")
 def show(vault: Path, page: str) -> None:
     """Print the metadata and body of PAGE (a path relative to wiki/) in VAULT."""
-    pages = list_pages(vault)
-    path = page_file(vault, page)
-    found = next((p for p in pages if path and p.path.resolve() == path), None)
-    if found is None:
+    described = describe_page(vault, page)
+    if described is None:
         raise click.ClickException(f"no such page: {page}")
+    found, links = described
     click.echo(f"type: {found.type or '?'}")
     click.echo(f"title: {found.title or ''}")
     click.echo(f"sources: {', '.join(found.sources)}")
     click.echo(f"tags: {', '.join(found.tags)}")
     click.echo()
     click.echo(found.body.lstrip("\n"), nl=False)
-    links = Resolver(pages).resolve_body(found.body)
     if links:
         click.echo("\nlinks:")
         for link in links:

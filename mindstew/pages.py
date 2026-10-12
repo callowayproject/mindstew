@@ -5,10 +5,13 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from mindstew.links import Resolver
 from mindstew.vault import PAGE_TYPE_FOLDERS, PAGE_TYPES
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from mindstew.links import Link
 
 
 def wiki_root(vault: Path) -> Path:
@@ -92,3 +95,11 @@ def find_page(vault: Path, name: str) -> Page | None:
     """Find a page by path relative to ``wiki/`` (the ``.md`` suffix is optional)."""
     path = page_file(vault, name)
     return read_page(path) if path else None
+
+
+def describe_page(vault: Path, name: str) -> tuple[Page, list[Link]] | None:
+    """Return the page at ``name`` (relative to ``wiki/``) and its links resolved against the whole vault, or None."""
+    path = page_file(vault, name)
+    pages = list_pages(vault)
+    found = next((p for p in pages if path and p.path.resolve() == path), None)
+    return (found, Resolver(pages).resolve_body(found.body)) if found else None
