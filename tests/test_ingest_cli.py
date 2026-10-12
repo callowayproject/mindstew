@@ -6,7 +6,7 @@ import pytest
 from click.testing import CliRunner, Result
 
 from mindstew.cli import cli
-from mindstew.ingest import Analysis, GeneratedPage, GeneratedPages
+from mindstew.ingest import Analysis, GeneratedPage, GeneratedPages, reingest_page
 from mindstew.ingest_queue import enqueue, list_items, next_item
 from mindstew.pages import list_pages
 from mindstew.providers import Provider, add_provider, set_route
@@ -136,6 +136,18 @@ def test_reingest_unknown_page_errors(vault: Path) -> None:
     result = CliRunner().invoke(cli, ["ingest", str(vault), "--reingest", "entities/nope.md"])
     assert result.exit_code != 0
     assert "no such page" in result.output
+
+
+def test_reingest_page_callable_without_click(vault: Path, fake_adapter: FakeAdapter) -> None:
+    """reingest_page regenerates in place and raises ValueError for an unknown page."""
+    (vault / "sources" / "x.md").write_text("x", encoding="utf-8")
+    _ok(fake_adapter, "Alice", "v1")
+    assert _run(vault).exit_code == 0
+    _ok(fake_adapter, "Alice", "v2")
+    assert reingest_page(vault, "entities/alice.md") == 0
+    assert list_pages(vault)[0].body.strip() == "v2"
+    with pytest.raises(ValueError, match="no such page"):
+        reingest_page(vault, "entities/nope.md")
 
 
 def test_vault_root_does_not_stage_config_files(vault: Path, fake_adapter: FakeAdapter) -> None:
