@@ -1,6 +1,5 @@
 """The `mindstew` command line."""
 
-import threading
 from pathlib import Path
 
 import click
@@ -249,7 +248,8 @@ def watch(vault: Path, folder: Path | None) -> None:
     watcher = Watcher(vault, folder, emit=click.echo)
     watcher.start()
     try:
-        threading.Event().wait()
+        watcher.wait()
     except KeyboardInterrupt:
-        watcher.stop()
         click.echo("stopped")
+    finally:
+        watcher.stop()

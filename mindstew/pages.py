@@ -97,9 +97,14 @@ def find_page(vault: Path, name: str) -> Page | None:
     return read_page(path) if path else None
 
 
-def describe_page(vault: Path, name: str) -> tuple[Page, list[Link]] | None:
-    """Return the page at ``name`` (relative to ``wiki/``) and its links resolved against the whole vault, or None."""
+def describe_page(
+    vault: Path, name: str, *, pages: list[Page] | None = None, resolver: Resolver | None = None
+) -> tuple[Page, list[Link]] | None:
+    """Return the page at ``name`` (relative to ``wiki/``) and its links resolved against the whole vault, or None.
+
+    A caller describing many pages passes the vault's ``pages`` (and a ``resolver`` over them) to avoid relisting.
+    """
     path = page_file(vault, name)
-    pages = list_pages(vault)
+    pages = list_pages(vault) if pages is None else pages
     found = next((p for p in pages if path and p.path.resolve() == path), None)
-    return (found, Resolver(pages).resolve_body(found.body)) if found else None
+    return (found, (resolver or Resolver(pages)).resolve_body(found.body)) if found else None
