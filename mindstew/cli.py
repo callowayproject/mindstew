@@ -15,7 +15,7 @@ from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachab
 from mindstew.ingest import TEXT_SUFFIXES, process_item
 from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
-from mindstew.pages import find_page, list_pages
+from mindstew.pages import find_page, list_pages, page_file
 from mindstew.providers import (
     ROLES,
     Header,
@@ -81,6 +81,8 @@ def ls(vault: Path | None) -> None:
         projects, notice = load_projects()
         if notice:
             click.echo(notice, err=True)
+        if not projects:
+            click.echo("No projects yet. Create one with mindstew new <path>.", err=True)
         for entry in projects:
             missing = "" if Path(entry["path"]).is_dir() else "\t(missing)"
             click.echo(f"{entry['path']}{missing}")
@@ -213,7 +215,9 @@ def status(vault: Path) -> None:
 @click.argument("page")
 def show(vault: Path, page: str) -> None:
     """Print the metadata and body of PAGE (a path relative to wiki/) in VAULT."""
-    found = find_page(vault, page)
+    pages = list_pages(vault)
+    path = page_file(vault, page)
+    found = next((p for p in pages if path and p.path.resolve() == path), None)
     if found is None:
         raise click.ClickException(f"no such page: {page}")
     click.echo(f"type: {found.type or '?'}")
@@ -222,7 +226,7 @@ def show(vault: Path, page: str) -> None:
     click.echo(f"tags: {', '.join(found.tags)}")
     click.echo()
     click.echo(found.body.lstrip("\n"), nl=False)
-    links = Resolver(list_pages(vault)).resolve_body(found.body)
+    links = Resolver(pages).resolve_body(found.body)
     if links:
         click.echo("\nlinks:")
         for link in links:

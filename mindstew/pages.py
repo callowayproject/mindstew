@@ -11,6 +11,11 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def wiki_root(vault: Path) -> Path:
+    """Return the vault's ``wiki/`` folder."""
+    return vault / "wiki"
+
+
 @dataclass(frozen=True)
 class Page:
     """A wiki page as read from disk; invalid metadata is left as None / empty."""
@@ -25,7 +30,7 @@ class Page:
 
     def wiki_relpath(self, vault: Path) -> str:
         """Return this page's path relative to the vault's ``wiki/`` folder."""
-        return str(self.path.relative_to(vault / "wiki"))
+        return str(self.path.relative_to(wiki_root(vault)))
 
 
 def _str_list(value: object) -> list[str]:
@@ -67,17 +72,23 @@ def read_page(path: Path) -> Page:
 
 def list_pages(vault: Path) -> list[Page]:
     """Return every page in the vault's typed folders, sorted by path."""
-    wiki = vault / "wiki"
+    wiki = wiki_root(vault)
     # Pages live only in typed folders, so index/log/overview/purpose/schema at the root are never scanned.
     paths = (p for folder in PAGE_TYPE_FOLDERS for p in (wiki / folder).rglob("*.md"))
     return [read_page(p) for p in sorted(paths)]
 
 
-def find_page(vault: Path, name: str) -> Page | None:
-    """Find a page by path relative to ``wiki/`` (the ``.md`` suffix is optional)."""
+def page_file(vault: Path, name: str) -> Path | None:
+    """Return the resolved file for a page path relative to ``wiki/`` (``.md`` optional), or None if not a page."""
     rel = name if name.endswith(".md") else f"{name}.md"
-    wiki = (vault / "wiki").resolve()
+    wiki = wiki_root(vault).resolve()
     path = (wiki / rel).resolve()
     if not path.is_file() or not path.is_relative_to(wiki) or path.relative_to(wiki).parts[0] not in PAGE_TYPE_FOLDERS:
         return None
-    return read_page(path)
+    return path
+
+
+def find_page(vault: Path, name: str) -> Page | None:
+    """Find a page by path relative to ``wiki/`` (the ``.md`` suffix is optional)."""
+    path = page_file(vault, name)
+    return read_page(path) if path else None

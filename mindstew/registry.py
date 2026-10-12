@@ -45,6 +45,17 @@ def load_projects() -> tuple[list[dict[str, str]], str | None]:
     return sorted(entries, key=lambda e: e["last_used"], reverse=True), None
 
 
+def _write_atomic(path: Path, text: str) -> None:
+    """Write ``text`` to ``path`` via a same-directory temp file, so readers never see a partial file."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(f"{path.name}.{os.getpid()}.tmp")
+    try:
+        tmp.write_text(text, encoding="utf-8")
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 def register(vault: Path) -> str | None:
     """Record ``vault`` as most recently used, replacing any existing entry for it.
 
@@ -54,6 +65,8 @@ def register(vault: Path) -> str | None:
     Returns:
         A notice if the existing registry was unreadable (and is being replaced) or could not be written,
         else None. Never raises.
+
+    The file is replaced atomically but not locked: concurrent ``new``/``open`` calls are last-writer-wins.
     """
     resolved = str(vault.resolve())
     entries, notice = load_projects()
@@ -61,8 +74,7 @@ def register(vault: Path) -> str | None:
     entries.append({"path": resolved, "last_used": datetime.now(timezone.utc).isoformat()})
     path = registry_path()
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(json.dumps({"projects": entries}, indent=2), encoding="utf-8")
+        _write_atomic(path, json.dumps({"projects": entries}, indent=2))
     except OSError:
         return f"notice: could not update project registry {path}"
     return notice

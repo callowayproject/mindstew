@@ -17,43 +17,76 @@ class Link(NamedTuple):
 
 
 _WIKILINK = re.compile(r"\[\[([^\[\]]*)\]\]")
+_FENCE = re.compile(r"^ {0,3}(`{3,}|~{3,})(.*)$")
+_INLINE_CODE = re.compile(r"(?<!`)(`+)(?!`).+?(?<!`)\1(?!`)", re.DOTALL)
 
 
 def _key(name: str) -> str:
-    """Return the case-insensitive lookup key for a title or alias."""
+    """Return the case-insensitive lookup key for a name."""
     return name.strip().casefold()
 
 
+def _strip_code(body: str) -> str:
+    """Return ``body`` without fenced blocks and inline code spans; an unterminated fence runs to the end."""
+    prose: list[str] = []
+    fence = ""
+    for line in body.split("\n"):
+        m = _FENCE.match(line)
+        if fence:
+            if m and m[1][0] == fence[0] and len(m[1]) >= len(fence) and not m[2].strip():
+                fence = ""
+        elif m and not (m[1][0] == "`" and "`" in m[2]):
+            fence = m[1]
+        else:
+            prose.append(line)
+    return _INLINE_CODE.sub("", "\n".join(prose))
+
+
+def _anchorless(text: str) -> str:
+    """Return ``text`` cut at the first ``#`` or ``^``, stripped."""
+    return re.split(r"[#^]", text, maxsplit=1)[0].strip()
+
+
 def extract_links(body: str) -> list[str]:
-    """Return the distinct wikilink targets in ``body`` in order, without ``|display``, ``#heading`` or ``^block``."""
+    r"""Return the distinct raw wikilink targets in prose, in order: the text before ``|display``.
+
+    ``\\|`` counts as ``|``. Links in code spans and fenced blocks are ignored, as are targets that are
+    empty once ``#heading`` and ``^block`` are removed.
+    """
     targets: dict[str, None] = {}
-    for raw in _WIKILINK.findall(body):
-        target = re.split(r"[|#^]", raw, maxsplit=1)[0].strip()
-        if target:
+    for raw in _WIKILINK.findall(_strip_code(body)):
+        target = raw.replace("\\|", "|").split("|", 1)[0].strip()
+        if _anchorless(target):
             targets[target] = None
     return list(targets)
 
 
 class Resolver:
-    """Maps wikilink targets to pages, case-insensitively on title, then on frontmatter ``aliases``.
+    """Maps wikilink targets to pages, case-insensitively, by filename stem, then title, then ``aliases``.
 
-    Duplicates are deterministic: a title beats any alias, and among equals the first page in the given order wins.
+    A target is tried as written, then cut at the first ``#`` or ``^``; each text goes through every tier first.
+    Duplicates are deterministic: within a tier the first page in the given order wins.
     """
 
     def __init__(self, pages: Iterable[Page]) -> None:
-        pages = list(pages)
-        self._by_name: dict[str, Page] = {}
-        # Two passes keep "title beats alias" without a priority field.
+        self._tiers: tuple[dict[str, Page], ...] = ({}, {}, {})  # stem, title, alias
+        stems, titles, aliases = self._tiers
         for page in pages:
+            stems.setdefault(_key(page.path.stem), page)
             if page.title:
-                self._by_name.setdefault(_key(page.title), page)
-        for page in pages:
+                titles.setdefault(_key(page.title), page)
             for alias in page.aliases:
-                self._by_name.setdefault(_key(alias), page)
+                aliases.setdefault(_key(alias), page)
 
     def resolve(self, target: str) -> Page | None:
         """Return the page ``target`` points at, or None."""
-        return self._by_name.get(_key(target))
+        for text in dict.fromkeys((target, _anchorless(target))):
+            if not text.strip():
+                continue
+            for tier in self._tiers:
+                if page := tier.get(_key(text)):
+                    return page
+        return None
 
     def resolve_body(self, body: str) -> list[Link]:
         """Return every link in ``body`` with its resolved page (None if unresolved)."""
