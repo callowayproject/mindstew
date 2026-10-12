@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.4.0 (2026-10-12)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.4...0.4.0)
+
+### Fixes
+
+- Fix: surface watcher errors, one resolver per ingest, document vault_path tests. [3f37fdc](https://github.com/callowayproject/mindstew/commit/3f37fdc676d7de38103cecea40e95c1de2f91a41)
+
+### New
+
+- Add describe_page: a page with its resolved links in one call (#71). [c49c9ef](https://github.com/callowayproject/mindstew/commit/c49c9ef70d09ee5a80a3d0867cb33d1a3b48ed9f)
+
+### Other
+
+- Feat: ingest_path interface in ingest module; CLI ingest is a thin wrapper (#68). [178ad23](https://github.com/callowayproject/mindstew/commit/178ad23b723122bfb38fc8314b84c7d4e4d39123)
+
+- Exclude agent worktrees from ruff in merge script. [3c23ae8](https://github.com/callowayproject/mindstew/commit/3c23ae8d694c2d06c0e7fa1a5cf23a2d874cb25a)
+
+### Updates
+
+- Refactor: move reingest into ingest.reingest_page (#69). [8614b8d](https://github.com/callowayproject/mindstew/commit/8614b8d79ba99798519660dd28fb11ba683b2f22)
+
+- Refactor: one vault_path safety check for ingest, source cleaning, reingest and page lookup (#67). [15d1581](https://github.com/callowayproject/mindstew/commit/15d1581edf23e0474d2d1d30fda0a3f355008b26)
+
+- Refactor: extract Click-free Watcher with start/stop (#70). [7fe0f94](https://github.com/callowayproject/mindstew/commit/7fe0f9460bf44f9d21d7c8cdcd506b1a42bf4298)
+
+- Refactor: registry reuses vault.atomic_write_text (#72). [a0c434c](https://github.com/callowayproject/mindstew/commit/a0c434c0f7df9e96d02cf15ad1efb653fe4c95ab)
+
 ## 0.3.4 (2026-10-12)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.3...0.3.4)
