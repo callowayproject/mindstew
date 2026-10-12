@@ -1,7 +1,6 @@
 """The `mindstew` command line."""
 
 import queue
-import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -12,7 +11,7 @@ from watchdog.observers import Observer
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest import CONFIG_FILES, TEXT_SUFFIXES, process_item
+from mindstew.ingest import drain, ingest_path, process_item, show_event, stage
 from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages, page_file
@@ -29,7 +28,7 @@ from mindstew.providers import (
 )
 from mindstew.registry import load_projects, register
 from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
-from mindstew.worker import Event, Worker
+from mindstew.worker import Worker
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -234,62 +233,10 @@ def show(vault: Path, page: str) -> None:
             click.echo(f"  {link.target} -> {dest}")
 
 
-def _stage(sources: Path, base: Path, path: Path, *, overwrite: bool = False) -> Path | None:
-    """Return the ``sources/`` path for ``path`` (under ``base``), copying it in if needed; None if skipped.
-
-    Hidden files are skipped silently, unsupported ones are reported and skipped, and a clashing different file
-    already in ``sources/`` is kept and reported unless ``overwrite`` (then it is replaced).
-    """
-    rel = path.relative_to(base)
-    if any(part.startswith(".") for part in rel.parts):
-        return None
-    if path.parent == sources.parent and path.name in CONFIG_FILES:
-        return None
-    if path.suffix.lower() not in TEXT_SUFFIXES:
-        click.echo(f"skipped (unsupported): {rel}")
-        return None
-    if path.is_relative_to(sources):
-        return path
-    dest = sources / rel
-    if dest.exists() and dest.read_bytes() != path.read_bytes():
-        if not overwrite:
-            click.echo(f"skipped (exists in sources/, not overwritten): {rel}")
-            return None
-        shutil.copy2(path, dest)
-    elif not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, dest)
-    return dest
-
-
-def _collect(vault: Path, root: Path) -> list[Path]:
-    """Stage the text sources under ``root`` (a file or folder) in ``vault/sources`` and return their paths."""
-    sources = (vault / "sources").resolve()
-    root = root.resolve()
-    base = root.parent if root.is_file() else root
-    found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
-    return [dest for path in found if (dest := _stage(sources, base, path))]
-
-
-def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
-    """Run the worker until ``queue_drained``, printing progress; exit non-zero if a pending item ended failed."""
-    pending = {i.id for i in list_items(vault) if i.status in ("queued", "running")}
-    if not pending:
-        click.echo("nothing to ingest")
-        return
-    drained = threading.Event()
-    worker = Worker(vault, process, poll_interval=0.05)
-
-    worker.subscribe(_show_event(click.echo))
-    worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
-    worker.start()
-    try:
-        drained.wait()
-    finally:
-        worker.stop()
-    failed = [i for i in list_items(vault) if i.id in pending and i.status == "failed"]
+def _fail_on(failed: int) -> None:
+    """Exit non-zero when ``failed`` items ended failed."""
     if failed:
-        raise click.ClickException(f"{len(failed)} item(s) failed")
+        raise click.ClickException(f"{failed} item(s) failed")
 
 
 @cli.command()
@@ -316,10 +263,9 @@ def ingest(vault: Path, path: Path | None, page: str | None) -> None:
                 only.add(src.resolve())
             else:
                 click.echo(f"skipped (missing source): {rel}")
+        _fail_on(drain(vault, process_item(vault, overwrite, only), click.echo))
     else:
-        for src in _collect(vault, path or vault / "sources"):
-            enqueue(vault, src, retry_failed=True)
-    _drain(vault, process_item(vault, overwrite, only))
+        _fail_on(ingest_path(vault, path, emit=click.echo))
 
 
 class _Collector(FileSystemEventHandler):
@@ -332,17 +278,6 @@ class _Collector(FileSystemEventHandler):
         """Record the file an event touched (the destination for moves)."""
         if event.event_type in ("created", "modified", "moved") and not event.is_directory:
             self.paths.put(Path(str(getattr(event, "dest_path", "") or event.src_path)))
-
-
-def _show_event(emit: Callable[[str], None]) -> Callable[[Event], None]:
-    def show(e: Event) -> None:
-        if e.kind != "queue_drained":
-            emit(
-                f"{e.kind.removeprefix('item_')}: {e.path.name if e.path else ''}"
-                + (f" ({e.error})" if e.error else "")
-            )
-
-    return show
 
 
 def watch_vault(
@@ -367,7 +302,7 @@ def watch_vault(
     observer.schedule(collector, str(root), recursive=True)
     observer.start()
     worker = Worker(vault, process or process_item(vault), poll_interval=0.05)
-    worker.subscribe(_show_event(emit))
+    worker.subscribe(show_event(emit))
     worker.start()
     sizes = {p.resolve(): -1 for p in root.rglob("*") if p.is_file()}
     try:
@@ -384,7 +319,9 @@ def watch_vault(
                     sizes[path] = size
                     continue
                 del sizes[path]
-                dest = _stage(sources, root, path, overwrite=True) if path.is_relative_to(root) else None
+                dest = (
+                    stage(sources, root, path, overwrite=True, emit=click.echo) if path.is_relative_to(root) else None
+                )
                 if dest and enqueue(vault, dest):
                     emit(f"queued: {dest.name}")
     finally:

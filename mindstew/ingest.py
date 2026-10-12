@@ -5,23 +5,28 @@ retry cap applies) and validates every generated page before writing any, so a f
 """
 
 import logging
+import shutil
+import threading
 from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from mindstew import adapter
+from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
 from mindstew.pages import list_pages, read_page
 from mindstew.providers import resolve_route
 from mindstew.slugs import new_page_path
 from mindstew.vault import PAGE_TYPES, atomic_write_text
+from mindstew.worker import Worker
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
     from pathlib import Path
 
     from mindstew.ingest_queue import QueueItem
+    from mindstew.worker import Event
 
 logger = logging.getLogger(__name__)
 
@@ -212,3 +217,83 @@ def process_item(
         _log_unresolved(vault, _write_all(vault, pages, source, overwrite, target))
 
     return process
+
+
+def stage(
+    sources: Path, base: Path, path: Path, *, overwrite: bool = False, emit: Callable[[str], None] = lambda _: None
+) -> Path | None:
+    """Return the ``sources/`` path for ``path`` (under ``base``), copying it in if needed; None if skipped.
+
+    Hidden files and vault config files are skipped silently, unsupported ones are reported to ``emit`` and
+    skipped, and a clashing different file already in ``sources/`` is kept and reported unless ``overwrite``.
+    """
+    rel = path.relative_to(base)
+    if any(part.startswith(".") for part in rel.parts):
+        return None
+    if path.parent == sources.parent and path.name in CONFIG_FILES:
+        return None
+    if path.suffix.lower() not in TEXT_SUFFIXES:
+        emit(f"skipped (unsupported): {rel}")
+        return None
+    if path.is_relative_to(sources):
+        return path
+    dest = sources / rel
+    if dest.exists() and dest.read_bytes() != path.read_bytes():
+        if not overwrite:
+            emit(f"skipped (exists in sources/, not overwritten): {rel}")
+            return None
+        shutil.copy2(path, dest)
+    elif not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
+    return dest
+
+
+def collect(vault: Path, root: Path, emit: Callable[[str], None] = lambda _: None) -> list[Path]:
+    """Stage the text sources under ``root`` (a file or folder) in ``vault/sources`` and return their paths."""
+    sources = (vault / "sources").resolve()
+    root = root.resolve()
+    base = root.parent if root.is_file() else root
+    found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    return [dest for path in found if (dest := stage(sources, base, path, emit=emit))]
+
+
+def show_event(emit: Callable[[str], None]) -> Callable[[Event], None]:
+    """Return a worker subscriber that reports each item event to ``emit`` as a line."""
+
+    def show(e: Event) -> None:
+        if e.kind != "queue_drained":
+            emit(
+                f"{e.kind.removeprefix('item_')}: {e.path.name if e.path else ''}"
+                + (f" ({e.error})" if e.error else "")
+            )
+
+    return show
+
+
+def drain(vault: Path, process: Callable[[QueueItem], None], emit: Callable[[str], None]) -> int:
+    """Run the worker until ``queue_drained``, reporting to ``emit``; return how many pending items ended failed."""
+    pending = {i.id for i in list_items(vault) if i.status in ("queued", "running")}
+    if not pending:
+        emit("nothing to ingest")
+        return 0
+    drained = threading.Event()
+    worker = Worker(vault, process, poll_interval=0.05)
+    worker.subscribe(show_event(emit))
+    worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
+    worker.start()
+    try:
+        drained.wait()
+    finally:
+        worker.stop()
+    return sum(1 for i in list_items(vault) if i.id in pending and i.status == "failed")
+
+
+def ingest_path(vault: Path, path: Path | None = None, *, emit: Callable[[str], None] = lambda _: None) -> int:
+    """Stage ``path`` (a file or folder; default: all of ``sources/``), enqueue it and run the queue.
+
+    Progress lines go to ``emit``. Returns the number of items that failed.
+    """
+    for src in collect(vault, path or vault / "sources", emit):
+        enqueue(vault, src, retry_failed=True)
+    return drain(vault, process_item(vault), emit)
