@@ -118,6 +118,24 @@ def test_folder_files_are_copied_into_sources(
     assert (vault / "sources" / "new.txt").read_text(encoding="utf-8") == "new"
 
 
+def test_watcher_start_stop_without_click(vault: Path, fake_adapter: FakeAdapter) -> None:
+    """The Watcher module is startable and stoppable and does not depend on Click."""
+    import mindstew.watcher as mod
+
+    assert "click" not in vars(mod)
+    _ok(fake_adapter, "Bob")
+    lines: list[str] = []
+    w = mod.Watcher(vault, emit=lines.append, settle=0.05)
+    w.start()
+    (vault / "sources" / "bob.md").write_text("Bob.", encoding="utf-8")
+    end = time.monotonic() + 10
+    while [i.status for i in list_items(vault)] != ["done"] and time.monotonic() < end:
+        time.sleep(0.02)
+    w.stop()
+    assert [p.title for p in list_pages(vault)] == ["Bob"]
+    w.stop()  # idempotent
+
+
 def test_stop_leaves_running_item_recoverable(vault: Path, start: Callable[..., Watcher]) -> None:
     """Stopping mid-item returns promptly and leaves the item running, which the next session recovers."""
     started, release = threading.Event(), threading.Event()
