@@ -132,7 +132,8 @@ def test_empty_and_config_pages_skipped_valid_written(
 def test_sources_normalized(vault: Path, fake_adapter: FakeAdapter) -> None:
     """``source:`` prefixes collapse into ``sources/<file>``, duplicates and unresolvable entries are dropped."""
     (vault / "sources" / "a.md").write_text("a", encoding="utf-8")
-    page = _page(sources=["sources/a.md", "source:a.md", "source:ghost.md", "sources/note.md"])
+    (vault / "outside.md").write_text("x", encoding="utf-8")
+    page = _page(sources=["sources/a.md", "source:a.md", "source:ghost.md", "source:../outside.md", "sources/note.md"])
     fake_adapter.respond(Analysis(summary="s"), GeneratedPages(pages=[page]))
     process_item(vault)(_item(vault))
     assert list_pages(vault)[0].sources == ["sources/note.md", "sources/a.md"]

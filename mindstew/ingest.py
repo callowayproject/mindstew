@@ -90,7 +90,7 @@ def _clean_source(vault: Path, s: str) -> str | None:
     """Return ``s`` as ``sources/<file>`` (``source:`` prefix stripped), or None if it is no source in the vault."""
     s = s.strip().removeprefix("source:").strip().replace("\\", "/").removeprefix("./")
     s = s if s.startswith("sources/") else f"sources/{s}"
-    return s if (vault / s).is_file() else None
+    return s if ".." not in s.split("/") and (vault / s).is_file() else None
 
 
 def _keep(page: GeneratedPage) -> bool:
