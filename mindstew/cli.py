@@ -1,18 +1,14 @@
 """The `mindstew` command line."""
 
-import queue
-import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
-from watchdog.events import FileSystemEvent, FileSystemEventHandler
-from watchdog.observers import Observer
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest import CONFIG_FILES, TEXT_SUFFIXES, process_item
+from mindstew.ingest import process_item
 from mindstew.ingest_queue import enqueue, list_items
 from mindstew.pages import describe_page, find_page, list_pages
 from mindstew.providers import (
@@ -28,7 +24,8 @@ from mindstew.providers import (
 )
 from mindstew.registry import load_projects, register
 from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
-from mindstew.worker import Event, Worker
+from mindstew.watcher import Watcher, show_event, stage, watch_vault  # ruff: ignore[unused-import]
+from mindstew.worker import Worker
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -232,31 +229,8 @@ def show(vault: Path, page: str) -> None:
 
 
 def _stage(sources: Path, base: Path, path: Path, *, overwrite: bool = False) -> Path | None:
-    """Return the ``sources/`` path for ``path`` (under ``base``), copying it in if needed; None if skipped.
-
-    Hidden files are skipped silently, unsupported ones are reported and skipped, and a clashing different file
-    already in ``sources/`` is kept and reported unless ``overwrite`` (then it is replaced).
-    """
-    rel = path.relative_to(base)
-    if any(part.startswith(".") for part in rel.parts):
-        return None
-    if path.parent == sources.parent and path.name in CONFIG_FILES:
-        return None
-    if path.suffix.lower() not in TEXT_SUFFIXES:
-        click.echo(f"skipped (unsupported): {rel}")
-        return None
-    if path.is_relative_to(sources):
-        return path
-    dest = sources / rel
-    if dest.exists() and dest.read_bytes() != path.read_bytes():
-        if not overwrite:
-            click.echo(f"skipped (exists in sources/, not overwritten): {rel}")
-            return None
-        shutil.copy2(path, dest)
-    elif not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, dest)
-    return dest
+    """Stage ``path`` into ``sources/`` (see :func:`mindstew.watcher.stage`), reporting skips on the console."""
+    return stage(sources, base, path, click.echo, overwrite=overwrite)
 
 
 def _collect(vault: Path, root: Path) -> list[Path]:
@@ -277,7 +251,7 @@ def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
     drained = threading.Event()
     worker = Worker(vault, process, poll_interval=0.05)
 
-    worker.subscribe(_show_event(click.echo))
+    worker.subscribe(show_event(click.echo))
     worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
     worker.start()
     try:
@@ -319,84 +293,16 @@ def ingest(vault: Path, path: Path | None, page: str | None) -> None:
     _drain(vault, process_item(vault, overwrite, only))
 
 
-class _Collector(FileSystemEventHandler):
-    """Collect the paths of created, modified and moved-in files."""
-
-    def __init__(self) -> None:
-        self.paths: queue.SimpleQueue[Path] = queue.SimpleQueue()
-
-    def on_any_event(self, event: FileSystemEvent) -> None:
-        """Record the file an event touched (the destination for moves)."""
-        if event.event_type in ("created", "modified", "moved") and not event.is_directory:
-            self.paths.put(Path(str(getattr(event, "dest_path", "") or event.src_path)))
-
-
-def _show_event(emit: Callable[[str], None]) -> Callable[[Event], None]:
-    def show(e: Event) -> None:
-        if e.kind != "queue_drained":
-            emit(
-                f"{e.kind.removeprefix('item_')}: {e.path.name if e.path else ''}"
-                + (f" ({e.error})" if e.error else "")
-            )
-
-    return show
-
-
-def watch_vault(
-    vault: Path,
-    folder: Path | None,
-    stop: threading.Event,
-    *,
-    emit: Callable[[str], None] = click.echo,
-    process: Callable[[QueueItem], None] | None = None,
-    settle: float = 0.5,
-) -> None:
-    """Watch ``folder`` (default ``vault/sources``), enqueue new/changed text files and ingest them until ``stop``.
-
-    Files from ``folder`` are copied into ``sources/``. A file is enqueued once its size is unchanged across a
-    ``settle`` interval, so partial writes are not ingested. Existing files are scanned at start (the queue skips
-    unchanged ones). On stop the in-flight item is abandoned and stays ``running``; the next worker start recovers it.
-    """
-    sources = (vault / "sources").resolve()
-    root = (folder or sources).resolve()
-    collector = _Collector()
-    observer = Observer()
-    observer.schedule(collector, str(root), recursive=True)
-    observer.start()
-    worker = Worker(vault, process or process_item(vault), poll_interval=0.05)
-    worker.subscribe(_show_event(emit))
-    worker.start()
-    sizes = {p.resolve(): -1 for p in root.rglob("*") if p.is_file()}
-    try:
-        while not stop.wait(settle):
-            while not collector.paths.empty():
-                sizes[collector.paths.get().resolve()] = -1
-            for path, last in list(sizes.items()):
-                try:
-                    size = path.stat().st_size
-                except OSError:
-                    del sizes[path]
-                    continue
-                if size != last:
-                    sizes[path] = size
-                    continue
-                del sizes[path]
-                dest = _stage(sources, root, path, overwrite=True) if path.is_relative_to(root) else None
-                if dest and enqueue(vault, dest):
-                    emit(f"queued: {dest.name}")
-    finally:
-        observer.stop()
-        worker.cancel()
-        observer.join()
-
-
 @cli.command()
 @click.argument("vault", type=click.Path(exists=True, file_okay=False, path_type=Path))
 @click.argument("folder", required=False, type=click.Path(exists=True, file_okay=False, path_type=Path))
 def watch(vault: Path, folder: Path | None) -> None:
     """Watch sources/ (or FOLDER, copying its files into sources/) and ingest new or changed files until Ctrl-C."""
     click.echo(f"watching {folder or vault / 'sources'} (Ctrl-C to stop)")
+    watcher = Watcher(vault, folder, emit=click.echo)
+    watcher.start()
     try:
-        watch_vault(vault, folder, threading.Event())
+        threading.Event().wait()
     except KeyboardInterrupt:
+        watcher.stop()
         click.echo("stopped")
