@@ -1,5 +1,75 @@
 # Changelog
 
+## 0.3.3 (2026-10-12)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.2...0.3.3)
+
+### Fixes
+
+- Fix: Wikilink resolver, atomic registry write, wiki_root helper and empty-ls hint. [4780c7a](https://github.com/callowayproject/mindstew/commit/4780c7aa9d34061e4c5b67470277c31683c921b6)
+
+  Closes #39, #40, #41, #42, #46, #47.
+
+### Other
+
+- Build(deps): Bump the github-actions group with 5 updates. [a4517bc](https://github.com/callowayproject/mindstew/commit/a4517bc9a3d46df9d4794bcc9c40f7ad3da789b3)
+
+  Bumps the github-actions group with 5 updates:
+
+  | Package | From | To |
+  | --- | --- | --- |
+  | [actions/checkout](https://github.com/actions/checkout) | `4` | `7` |
+  | [actions/setup-node](https://github.com/actions/setup-node) | `4` | `7` |
+  | [actions/configure-pages](https://github.com/actions/configure-pages) | `5` | `6` |
+  | [actions/upload-pages-artifact](https://github.com/actions/upload-pages-artifact) | `3` | `5` |
+  | [actions/deploy-pages](https://github.com/actions/deploy-pages) | `4` | `5` |
+
+  Updates `actions/checkout` from 4 to 7
+
+  - [Release notes](https://github.com/actions/checkout/releases)
+  - [Changelog](https://github.com/actions/checkout/blob/main/CHANGELOG.md)
+  - [Commits](https://github.com/actions/checkout/compare/v4...v7)
+
+  Updates `actions/setup-node` from 4 to 7
+
+  - [Release notes](https://github.com/actions/setup-node/releases)
+  - [Commits](https://github.com/actions/setup-node/compare/v4...v7)
+
+  Updates `actions/configure-pages` from 5 to 6
+
+  - [Release notes](https://github.com/actions/configure-pages/releases)
+  - [Commits](https://github.com/actions/configure-pages/compare/v5...v6)
+
+  Updates `actions/upload-pages-artifact` from 3 to 5
+
+  - [Release notes](https://github.com/actions/upload-pages-artifact/releases)
+  - [Commits](https://github.com/actions/upload-pages-artifact/compare/v3...v5)
+
+  Updates `actions/deploy-pages` from 4 to 5
+
+  - [Release notes](https://github.com/actions/deploy-pages/releases)
+  - [Commits](https://github.com/actions/deploy-pages/compare/v4...v5)
+
+  ______________________________________________________________________
+
+  **updated-dependencies:** - dependency-name: actions/checkout
+  dependency-version: '7'
+  dependency-type: direct:production
+  update-type: version-update:semver-major
+  dependency-group: github-actions
+
+  **signed-off-by:** dependabot[bot] <support@github.com>
+
+- Docs: Add wikilink resolver design decisions and glossary updates. [75ee7ba](https://github.com/callowayproject/mindstew/commit/75ee7ba4904a42269ccae36cfae0eaef64c7287f)
+
+  Introduces detailed design notes for the shared wikilink resolver, covering resolution rules and associated terminology. Updates the glossary with new entries for "Wikilink target" and "Page name."
+
+- Docs: Add deployment workflow and comprehensive documentation structure. [a627665](https://github.com/callowayproject/mindstew/commit/a627665ea3f3ee2ebef6ef04e91780902d87ea60)
+
+  Integrates a GitHub Actions workflow for docs deployment and introduces foundational Vitepress-based documentation. This includes guides, concepts, CLI references, and tutorials for `mindstew`.
+
+- Docs: rename CONTEXT.md to GLOSSARY.md. [ca2dc55](https://github.com/callowayproject/mindstew/commit/ca2dc554d7d62c44f3f905d35656e5331b3e4a4a)
+
 ## 0.3.2 (2026-10-10)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.1...0.3.2)
