@@ -96,6 +96,22 @@ def _find_conflict(root: Path) -> Path | None:
     return None
 
 
+def vault_path(vault: Path, rel: object) -> Path | None:
+    r"""Return the resolved path of ``rel`` inside ``vault``, or None if it is malformed or escapes the vault.
+
+    Rejects non-strings, empty/NUL-bearing values, absolute paths, ``..`` segments (``\\`` counts as ``/``),
+    and anything whose symlinks resolve outside the vault. The path need not exist.
+    """
+    if not isinstance(rel, str) or not rel or "\0" in rel:
+        return None
+    norm = rel.replace("\\", "/")
+    if norm.startswith("/") or ".." in norm.split("/"):
+        return None
+    root = vault.resolve()
+    path = (root / norm).resolve()
+    return path if path.is_relative_to(root) else None
+
+
 def is_vault(root: Path) -> bool:
     """Return True if ``root`` holds every essential vault file and folder (derived data is not required)."""
     return all((root / d).is_dir() for d in ESSENTIAL_DIRS) and all((root / f).is_file() for f in STARTER_FILES)
