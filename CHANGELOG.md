@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.3.4 (2026-10-12)
+
+[Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.3...0.3.4)
+
+### Fixes
+
+- Fix: reject traversal in normalized page sources. [c10b01f](https://github.com/callowayproject/mindstew/commit/c10b01f0f4abdbdfbc064ff6ec46c14605386eda)
+
+- Fix: skip empty/config pages on ingest, normalize page sources, never stage schema/purpose. [8bde516](https://github.com/callowayproject/mindstew/commit/8bde516e428f63e01577159651390d8cc491a918)
+
+  Closes #61
+
 ## 0.3.3 (2026-10-12)
 
 [Compare the full difference.](https://github.com/callowayproject/mindstew/compare/0.3.2...0.3.3)
