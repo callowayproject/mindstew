@@ -14,7 +14,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from mindstew import adapter
 from mindstew.ingest_queue import enqueue, list_items
-from mindstew.pages import describe_page, find_page, read_page, wiki_root
+from mindstew.links import Resolver
+from mindstew.pages import describe_page, find_page, list_pages, read_page, wiki_root
 from mindstew.providers import resolve_route
 from mindstew.slugs import new_page_path
 from mindstew.vault import PAGE_TYPES, atomic_write_text, vault_path
@@ -152,8 +153,14 @@ def _write_all(
 def _log_unresolved(vault: Path, paths: list[Path]) -> None:
     """Log every ``[[wikilink]]`` in the written pages that resolves to no page."""
     wiki = wiki_root(vault).resolve()
+    pages = list_pages(vault)
+    resolver = Resolver(pages)
     for path in paths:
-        described = describe_page(vault, str(path.resolve().relative_to(wiki)))
+        try:
+            name = str(path.resolve().relative_to(wiki))
+        except ValueError:
+            continue
+        described = describe_page(vault, name, pages=pages, resolver=resolver)
         for link in described[1] if described else ():
             if link.page is None:
                 logger.info("unresolved link [[%s]] in %s", link.target, path)

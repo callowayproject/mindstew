@@ -93,16 +93,25 @@ class Watcher:
         settle: float = 0.5,
     ) -> None:
         self._stop = threading.Event()
-        self._thread = threading.Thread(
-            target=watch_vault,
-            args=(vault, folder, self._stop),
-            kwargs={"emit": emit, "process": process, "settle": settle},
-            daemon=True,
-        )
+        self._error: BaseException | None = None
+
+        def run() -> None:
+            try:
+                watch_vault(vault, folder, self._stop, emit=emit, process=process, settle=settle)
+            except BaseException as exc:  # ruff: ignore[blind-except] - handed to the thread that calls ``wait``
+                self._error = exc
+
+        self._thread = threading.Thread(target=run, daemon=True)
 
     def start(self) -> None:
         """Begin watching."""
         self._thread.start()
+
+    def wait(self) -> None:
+        """Block until the watch ends, re-raising any error from the watch thread."""
+        self._thread.join()
+        if self._error:
+            raise self._error
 
     def stop(self) -> None:
         """Stop watching and wait for shutdown; the in-flight item stays ``running`` for recovery. Idempotent."""

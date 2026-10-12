@@ -11,6 +11,7 @@ from mindstew.ingest import Analysis, GeneratedPage, GeneratedPages
 from mindstew.ingest_queue import list_items, recover_running
 from mindstew.pages import list_pages
 from mindstew.providers import Provider, add_provider, set_route
+from mindstew.watcher import Watcher as RealWatcher
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator
@@ -153,3 +154,18 @@ def test_stop_leaves_running_item_recoverable(vault: Path, start: Callable[..., 
     assert [i.status for i in list_items(vault)] == ["running"]
     release.set()
     assert recover_running(vault) == 1
+
+
+def test_watcher_thread_error_surfaces_from_wait(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """An error in the watch loop (here, the observer failing to schedule) is re-raised by ``wait``, not lost."""
+
+    class BrokenObserver:
+        def schedule(self, *_a: object, **_k: object) -> None:
+            raise OSError("no such folder")
+
+    monkeypatch.setattr("mindstew.watcher.Observer", BrokenObserver)
+    w = RealWatcher(tmp_path, emit=lambda _m: None)
+    w.start()
+    with pytest.raises(OSError, match="no such folder"):
+        w.wait()
+    w.stop()

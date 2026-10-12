@@ -1,10 +1,12 @@
 """Two-step text ingest."""
 
+import logging
 from typing import TYPE_CHECKING
 
 import pytest
 
 from mindstew import adapter
+from mindstew import ingest as ingest_mod
 from mindstew.ingest import Analysis, GeneratedPage, GeneratedPages, IngestError, process_item
 from mindstew.ingest_queue import QueueItem, enqueue, list_items, mark_done, next_item
 from mindstew.pages import list_pages
@@ -14,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
 
+    from mindstew.pages import Page
     from tests.conftest import FakeAdapter
 
 
@@ -155,3 +158,30 @@ def test_step2_prompt_has_guards(vault: Path, fake_adapter: FakeAdapter) -> None
     system = fake_adapter.calls[1][1][0]["content"]
     for phrase in ("empty bodies", "schema.md and purpose.md", "exactly as written"):
         assert phrase in system
+
+
+def test_log_unresolved_lists_vault_once_and_skips_outside_paths(
+    make_vault: Callable[..., Path], monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture, tmp_path: Path
+) -> None:
+    """Logging unresolved links costs one vault listing per ingest, and a path outside ``wiki/`` is skipped."""
+    vault = make_vault()
+    written = []
+    for name in ("a", "b"):
+        page = vault / "wiki" / "entities" / f"{name}.md"
+        page.parent.mkdir(parents=True, exist_ok=True)
+        page.write_text("---\ntype: entity\ntitle: T\n---\nsee [[Ghost]]\n", encoding="utf-8")
+        written.append(page)
+    outside = tmp_path / "elsewhere.md"
+    outside.write_text("x", encoding="utf-8")
+    calls: list[int] = []
+    real = ingest_mod.list_pages
+
+    def counting(v: Path) -> list[Page]:
+        calls.append(1)
+        return real(v)
+
+    monkeypatch.setattr(ingest_mod, "list_pages", counting)
+    with caplog.at_level(logging.INFO, logger="mindstew.ingest"):
+        ingest_mod._log_unresolved(vault, [*written, outside])
+    assert len(calls) == 1
+    assert caplog.text.count("unresolved link [[Ghost]]") == 2
