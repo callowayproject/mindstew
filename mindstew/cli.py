@@ -7,9 +7,9 @@ import click
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest import drain, ingest_path, process_item
-from mindstew.ingest_queue import enqueue, list_items
-from mindstew.pages import describe_page, find_page, list_pages
+from mindstew.ingest import ingest_path, reingest_page
+from mindstew.ingest_queue import list_items
+from mindstew.pages import describe_page, list_pages
 from mindstew.providers import (
     ROLES,
     Header,
@@ -22,7 +22,7 @@ from mindstew.providers import (
     set_route,
 )
 from mindstew.registry import load_projects, register
-from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault, vault_path
+from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
 from mindstew.watcher import Watcher, watch_vault  # ruff: ignore[unused-import]
 
 
@@ -233,26 +233,11 @@ def _fail_on(failed: int) -> None:
 @click.option("--reingest", "page", metavar="PAGE", help="Regenerate PAGE (relative to wiki/) from its sources.")
 def ingest(vault: Path, path: Path | None, page: str | None) -> None:
     """Ingest PATH (a file or folder; default: everything in sources/) into VAULT, then run the queue."""
-    overwrite = None
-    only: set[Path] = set()
-    if page:
-        found = find_page(vault, page)
-        if found is None:
-            raise click.ClickException(f"no such page: {page}")
-        overwrite = found.path
-        for rel in found.sources:  # validate everything before enqueuing anything
-            if vault_path(vault, rel) is None:
-                raise click.ClickException(f"page source is not inside the vault: {rel!r}")
-        for rel in found.sources:
-            src = vault / rel
-            if src.is_file():
-                enqueue(vault, src, force=True)
-                only.add(src.resolve())
-            else:
-                click.echo(f"skipped (missing source): {rel}")
-        _fail_on(drain(vault, process_item(vault, overwrite, only), click.echo))
-    else:
-        _fail_on(ingest_path(vault, path, emit=click.echo))
+    try:
+        failed = reingest_page(vault, page, emit=click.echo) if page else ingest_path(vault, path, emit=click.echo)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
+    _fail_on(failed)
 
 
 @cli.command()

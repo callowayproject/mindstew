@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from mindstew import adapter
 from mindstew.ingest_queue import enqueue, list_items
-from mindstew.pages import describe_page, read_page, wiki_root
+from mindstew.pages import describe_page, find_page, read_page, wiki_root
 from mindstew.providers import resolve_route
 from mindstew.slugs import new_page_path
 from mindstew.vault import PAGE_TYPES, atomic_write_text, vault_path
@@ -288,6 +288,28 @@ def drain(vault: Path, process: Callable[[QueueItem], None], emit: Callable[[str
     finally:
         worker.stop()
     return sum(1 for i in list_items(vault) if i.id in pending and i.status == "failed")
+
+
+def reingest_page(vault: Path, page: str, *, emit: Callable[[str], None] = lambda _: None) -> int:
+    """Regenerate ``page`` (relative to ``wiki/``) in place from its sources; return how many items failed.
+
+    Raises ``ValueError`` for an unknown page or a source outside the vault, before enqueuing anything.
+    """
+    found = find_page(vault, page)
+    if found is None:
+        raise ValueError(f"no such page: {page}")
+    for rel in found.sources:  # validate everything before enqueuing anything
+        if vault_path(vault, rel) is None:
+            raise ValueError(f"page source is not inside the vault: {rel!r}")
+    only: set[Path] = set()
+    for rel in found.sources:
+        src = vault / rel
+        if src.is_file():
+            enqueue(vault, src, force=True)
+            only.add(src.resolve())
+        else:
+            emit(f"skipped (missing source): {rel}")
+    return drain(vault, process_item(vault, found.path, only), emit)
 
 
 def ingest_path(vault: Path, path: Path | None = None, *, emit: Callable[[str], None] = lambda _: None) -> int:
