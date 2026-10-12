@@ -12,7 +12,7 @@ from watchdog.observers import Observer
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest import TEXT_SUFFIXES, process_item
+from mindstew.ingest import CONFIG_FILES, TEXT_SUFFIXES, process_item
 from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
 from mindstew.pages import find_page, list_pages, page_file
@@ -242,6 +242,8 @@ def _stage(sources: Path, base: Path, path: Path, *, overwrite: bool = False) ->
     """
     rel = path.relative_to(base)
     if any(part.startswith(".") for part in rel.parts):
+        return None
+    if path.parent == sources.parent and path.name in CONFIG_FILES:
         return None
     if path.suffix.lower() not in TEXT_SUFFIXES:
         click.echo(f"skipped (unsupported): {rel}")
