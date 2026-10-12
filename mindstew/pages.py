@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from mindstew.vault import PAGE_TYPE_FOLDERS, PAGE_TYPES
+from mindstew.vault import PAGE_TYPE_FOLDERS, PAGE_TYPES, vault_path
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -82,8 +82,8 @@ def page_file(vault: Path, name: str) -> Path | None:
     """Return the resolved file for a page path relative to ``wiki/`` (``.md`` optional), or None if not a page."""
     rel = name if name.endswith(".md") else f"{name}.md"
     wiki = wiki_root(vault).resolve()
-    path = (wiki / rel).resolve()
-    if not path.is_file() or not path.is_relative_to(wiki) or path.relative_to(wiki).parts[0] not in PAGE_TYPE_FOLDERS:
+    path = vault_path(wiki, rel)
+    if not path or not path.is_file() or path.relative_to(wiki).parts[0] not in PAGE_TYPE_FOLDERS:
         return None
     return path
 

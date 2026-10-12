@@ -15,7 +15,7 @@ from mindstew.links import Resolver
 from mindstew.pages import list_pages, read_page
 from mindstew.providers import resolve_route
 from mindstew.slugs import new_page_path
-from mindstew.vault import PAGE_TYPES, atomic_write_text
+from mindstew.vault import PAGE_TYPES, atomic_write_text, vault_path
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
@@ -74,7 +74,7 @@ def _read(vault: Path, name: str) -> str:
         return ""
 
 
-def _validate(pages: list[GeneratedPage]) -> None:
+def _validate(vault: Path, pages: list[GeneratedPage]) -> None:
     """Raise ``IngestError`` if any page is invalid; called before anything is written."""
     for page in pages:
         if page.type not in PAGE_TYPES:
@@ -82,7 +82,7 @@ def _validate(pages: list[GeneratedPage]) -> None:
         if not page.title.strip():
             raise IngestError("model returned a page with an empty title")
         for s in page.sources:
-            if s.startswith(("/", "\\")) or ".." in s.replace("\\", "/").split("/"):
+            if vault_path(vault, s) is None:
                 raise IngestError(f"page {page.title!r} has non vault-relative source {s!r}")
 
 
@@ -90,7 +90,8 @@ def _clean_source(vault: Path, s: str) -> str | None:
     """Return ``s`` as ``sources/<file>`` (``source:`` prefix stripped), or None if it is no source in the vault."""
     s = s.strip().removeprefix("source:").strip().replace("\\", "/").removeprefix("./")
     s = s if s.startswith("sources/") else f"sources/{s}"
-    return s if ".." not in s.split("/") and (vault / s).is_file() else None
+    path = vault_path(vault, s)
+    return s if path and path.is_file() else None
 
 
 def _keep(page: GeneratedPage) -> bool:
@@ -206,7 +207,7 @@ def process_item(
             ],
             GeneratedPages,
         )
-        _validate(generated.pages)
+        _validate(vault, generated.pages)
         pages = [p for p in generated.pages if _keep(p)]
         target = _pick(pages, overwrite) if overwrite and item.path in only else None
         _log_unresolved(vault, _write_all(vault, pages, source, overwrite, target))

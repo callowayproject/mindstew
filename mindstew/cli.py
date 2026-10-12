@@ -28,7 +28,7 @@ from mindstew.providers import (
     set_route,
 )
 from mindstew.registry import load_projects, register
-from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault
+from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault, vault_path
 from mindstew.worker import Event, Worker
 
 if TYPE_CHECKING:
@@ -305,9 +305,8 @@ def ingest(vault: Path, path: Path | None, page: str | None) -> None:
         if found is None:
             raise click.ClickException(f"no such page: {page}")
         overwrite = found.path
-        root = vault.resolve()
         for rel in found.sources:  # validate everything before enqueuing anything
-            if not isinstance(rel, str) or not (vault / rel).resolve().is_relative_to(root) or Path(rel).is_absolute():
+            if vault_path(vault, rel) is None:
                 raise click.ClickException(f"page source is not inside the vault: {rel!r}")
         for rel in found.sources:
             src = vault / rel
