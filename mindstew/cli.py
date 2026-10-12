@@ -2,13 +2,12 @@
 
 import threading
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import click
 
 from mindstew import adapter
 from mindstew.adapter import ProviderAuthError, ProviderError, ProviderUnreachableError
-from mindstew.ingest import process_item
+from mindstew.ingest import drain, ingest_path, process_item
 from mindstew.ingest_queue import enqueue, list_items
 from mindstew.pages import describe_page, find_page, list_pages
 from mindstew.providers import (
@@ -24,13 +23,7 @@ from mindstew.providers import (
 )
 from mindstew.registry import load_projects, register
 from mindstew.vault import VaultConflictError, VaultExistsError, create_vault, fill_scaffold, is_vault, vault_path
-from mindstew.watcher import Watcher, show_event, stage, watch_vault  # ruff: ignore[unused-import]
-from mindstew.worker import Worker
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
-    from mindstew.ingest_queue import QueueItem
+from mindstew.watcher import Watcher, watch_vault  # ruff: ignore[unused-import]
 
 
 @click.group()
@@ -228,39 +221,10 @@ def show(vault: Path, page: str) -> None:
             click.echo(f"  {link.target} -> {dest}")
 
 
-def _stage(sources: Path, base: Path, path: Path, *, overwrite: bool = False) -> Path | None:
-    """Stage ``path`` into ``sources/`` (see :func:`mindstew.watcher.stage`), reporting skips on the console."""
-    return stage(sources, base, path, click.echo, overwrite=overwrite)
-
-
-def _collect(vault: Path, root: Path) -> list[Path]:
-    """Stage the text sources under ``root`` (a file or folder) in ``vault/sources`` and return their paths."""
-    sources = (vault / "sources").resolve()
-    root = root.resolve()
-    base = root.parent if root.is_file() else root
-    found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
-    return [dest for path in found if (dest := _stage(sources, base, path))]
-
-
-def _drain(vault: Path, process: Callable[[QueueItem], None]) -> None:
-    """Run the worker until ``queue_drained``, printing progress; exit non-zero if a pending item ended failed."""
-    pending = {i.id for i in list_items(vault) if i.status in ("queued", "running")}
-    if not pending:
-        click.echo("nothing to ingest")
-        return
-    drained = threading.Event()
-    worker = Worker(vault, process, poll_interval=0.05)
-
-    worker.subscribe(show_event(click.echo))
-    worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
-    worker.start()
-    try:
-        drained.wait()
-    finally:
-        worker.stop()
-    failed = [i for i in list_items(vault) if i.id in pending and i.status == "failed"]
+def _fail_on(failed: int) -> None:
+    """Exit non-zero when ``failed`` items ended failed."""
     if failed:
-        raise click.ClickException(f"{len(failed)} item(s) failed")
+        raise click.ClickException(f"{failed} item(s) failed")
 
 
 @cli.command()
@@ -286,10 +250,9 @@ def ingest(vault: Path, path: Path | None, page: str | None) -> None:
                 only.add(src.resolve())
             else:
                 click.echo(f"skipped (missing source): {rel}")
+        _fail_on(drain(vault, process_item(vault, overwrite, only), click.echo))
     else:
-        for src in _collect(vault, path or vault / "sources"):
-            enqueue(vault, src, retry_failed=True)
-    _drain(vault, process_item(vault, overwrite, only))
+        _fail_on(ingest_path(vault, path, emit=click.echo))
 
 
 @cli.command()

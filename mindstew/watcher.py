@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import queue
-import shutil
 import threading
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -11,57 +10,14 @@ from typing import TYPE_CHECKING
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 
-from mindstew.ingest import CONFIG_FILES, TEXT_SUFFIXES, process_item
+from mindstew.ingest import process_item, show_event, stage
 from mindstew.ingest_queue import enqueue
-from mindstew.worker import Event, Worker
+from mindstew.worker import Worker
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
     from mindstew.ingest_queue import QueueItem
-
-
-def stage(
-    sources: Path, base: Path, path: Path, emit: Callable[[str], None], *, overwrite: bool = False
-) -> Path | None:
-    """Return the ``sources/`` path for ``path`` (under ``base``), copying it in if needed; None if skipped.
-
-    Hidden files are skipped silently, unsupported ones are reported and skipped, and a clashing different file
-    already in ``sources/`` is kept and reported unless ``overwrite`` (then it is replaced).
-    """
-    rel = path.relative_to(base)
-    if any(part.startswith(".") for part in rel.parts):
-        return None
-    if path.parent == sources.parent and path.name in CONFIG_FILES:
-        return None
-    if path.suffix.lower() not in TEXT_SUFFIXES:
-        emit(f"skipped (unsupported): {rel}")
-        return None
-    if path.is_relative_to(sources):
-        return path
-    dest = sources / rel
-    if dest.exists() and dest.read_bytes() != path.read_bytes():
-        if not overwrite:
-            emit(f"skipped (exists in sources/, not overwritten): {rel}")
-            return None
-        shutil.copy2(path, dest)
-    elif not dest.exists():
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(path, dest)
-    return dest
-
-
-def show_event(emit: Callable[[str], None]) -> Callable[[Event], None]:
-    """Return a worker subscriber that renders events as one-line messages for ``emit``."""
-
-    def show(e: Event) -> None:
-        if e.kind != "queue_drained":
-            emit(
-                f"{e.kind.removeprefix('item_')}: {e.path.name if e.path else ''}"
-                + (f" ({e.error})" if e.error else "")
-            )
-
-    return show
 
 
 class _Collector(FileSystemEventHandler):
@@ -115,7 +71,7 @@ def watch_vault(
                     sizes[path] = size
                     continue
                 del sizes[path]
-                dest = stage(sources, root, path, emit, overwrite=True) if path.is_relative_to(root) else None
+                dest = stage(sources, root, path, overwrite=True, emit=emit) if path.is_relative_to(root) else None
                 if dest and enqueue(vault, dest):
                     emit(f"queued: {dest.name}")
     finally:
