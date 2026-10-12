@@ -274,7 +274,12 @@ def test_failed_write_rolls_back_earlier_pages(
     _src(vault, "x.md", "x")
     fake_adapter.respond(
         Analysis(summary="s"),
-        GeneratedPages(pages=[GeneratedPage(type="entity", title="A"), GeneratedPage(type="entity", title="B")]),
+        GeneratedPages(
+            pages=[
+                GeneratedPage(type="entity", title="A", body="a"),
+                GeneratedPage(type="entity", title="B", body="b"),
+            ]
+        ),
     )
     item = _claim(vault, "x.md")
     with pytest.raises(OSError, match="full"):

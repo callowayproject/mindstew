@@ -8,7 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from mindstew import adapter
 from mindstew.links import Resolver
@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 TEXT_SUFFIXES = (".md", ".txt")
+CONFIG_FILES = ("schema.md", "purpose.md")  # vault configuration: model context, never source material
+_META_TITLES = {n.removesuffix(".md") for n in CONFIG_FILES}
 _SOURCE_READ_ERRORS = (ValueError, OSError)  # ValueError: outside the vault, or not UTF-8
 
 
@@ -48,6 +50,14 @@ class GeneratedPage(BaseModel):
     sources: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     body: str = ""
+
+    @field_validator("sources", mode="before")
+    @classmethod
+    def _tolerate_sources(cls, v: object) -> list[str]:
+        """Accept a missing, scalar or non-list ``sources`` from the model; keep only string entries."""
+        if isinstance(v, str):
+            return [v]
+        return [s for s in v if isinstance(s, str)] if isinstance(v, list) else []
 
 
 class GeneratedPages(BaseModel):
@@ -76,12 +86,30 @@ def _validate(pages: list[GeneratedPage]) -> None:
                 raise IngestError(f"page {page.title!r} has non vault-relative source {s!r}")
 
 
+def _clean_source(vault: Path, s: str) -> str | None:
+    """Return ``s`` as ``sources/<file>`` (``source:`` prefix stripped), or None if it is no source in the vault."""
+    s = s.strip().removeprefix("source:").strip().replace("\\", "/").removeprefix("./")
+    s = s if s.startswith("sources/") else f"sources/{s}"
+    return s if ".." not in s.split("/") and (vault / s).is_file() else None
+
+
+def _keep(page: GeneratedPage) -> bool:
+    """False (and log) for a page with an empty body or one titled like a vault config file."""
+    if not page.body.strip():
+        logger.warning("skipping page %r: empty body", page.title)
+    elif page.title.strip().casefold().removesuffix(".md") in _META_TITLES:
+        logger.warning("skipping page %r: vault config, not a topic", page.title)
+    else:
+        return True
+    return False
+
+
 def _write(vault: Path, page: GeneratedPage, source: str, overwrite: Path | None = None) -> Path:
     """Write ``page`` to a new free path in its typed folder (or over ``overwrite``) and return the path."""
     meta = {
         "type": page.type,
         "title": page.title.strip(),
-        "sources": list(dict.fromkeys([source, *page.sources])),
+        "sources": list(dict.fromkeys([source, *filter(None, (_clean_source(vault, s) for s in page.sources))])),
         "tags": page.tags,
     }
     text = f"---\n{yaml.safe_dump(meta, sort_keys=False, allow_unicode=True)}---\n\n{page.body.strip()}\n"
@@ -165,13 +193,22 @@ def process_item(
         generated = adapter.complete(
             route,
             [
-                {"role": "system", "content": "Write the planned wiki pages as JSON. Link pages with [[Title]]."},
+                {
+                    "role": "system",
+                    "content": (
+                        "Write the planned wiki pages as JSON. Link pages with [[Title]]. "
+                        "Do not emit pages with empty bodies; skip page types that have nothing to say. "
+                        "schema.md and purpose.md are configuration, not source material: write no pages about them. "
+                        "Keep entity titles exactly as written in the source."
+                    ),
+                },
                 {"role": "user", "content": f"{brief}\n\n# Analysis\n{analysis.model_dump_json()}"},
             ],
             GeneratedPages,
         )
         _validate(generated.pages)
-        target = _pick(generated.pages, overwrite) if overwrite and item.path in only else None
-        _log_unresolved(vault, _write_all(vault, generated.pages, source, overwrite, target))
+        pages = [p for p in generated.pages if _keep(p)]
+        target = _pick(pages, overwrite) if overwrite and item.path in only else None
+        _log_unresolved(vault, _write_all(vault, pages, source, overwrite, target))
 
     return process

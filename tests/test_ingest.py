@@ -115,3 +115,43 @@ def test_unsupported_extension_and_binary_fail(vault: Path, fake_adapter: FakeAd
     with pytest.raises(IngestError):
         process_item(vault)(item)
     assert fake_adapter.calls == []
+
+
+def test_empty_and_config_pages_skipped_valid_written(
+    vault: Path, fake_adapter: FakeAdapter, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Empty/whitespace-body and schema/purpose-titled pages are skipped and logged; the rest is written."""
+    pages = [_page(title="E", body=""), _page(title="W", body=" \n"), _page(title="Schema"), _page(title="purpose.md")]
+    fake_adapter.respond(Analysis(summary="s"), GeneratedPages(pages=[*pages, _page(title="Good")]))
+    with caplog.at_level("WARNING"):
+        process_item(vault)(_item(vault))
+    assert [p.title for p in list_pages(vault)] == ["Good"]
+    assert caplog.text.count("skipping page") == 4
+
+
+def test_sources_normalized(vault: Path, fake_adapter: FakeAdapter) -> None:
+    """``source:`` prefixes collapse into ``sources/<file>``, duplicates and unresolvable entries are dropped."""
+    (vault / "sources" / "a.md").write_text("a", encoding="utf-8")
+    (vault / "outside.md").write_text("x", encoding="utf-8")
+    page = _page(sources=["sources/a.md", "source:a.md", "source:ghost.md", "source:../outside.md", "sources/note.md"])
+    fake_adapter.respond(Analysis(summary="s"), GeneratedPages(pages=[page]))
+    process_item(vault)(_item(vault))
+    assert list_pages(vault)[0].sources == ["sources/note.md", "sources/a.md"]
+
+
+@pytest.mark.parametrize("bad", [None, "sources/note.md", {"a": 1}, [None, 3]])
+def test_malformed_sources_tolerated(vault: Path, fake_adapter: FakeAdapter, bad: object) -> None:
+    """A null, scalar or non-list ``sources`` from the model does not crash ingest."""
+    page = GeneratedPage.model_validate({"type": "entity", "title": "A", "body": "b", "sources": bad})
+    fake_adapter.respond(Analysis(summary="s"), GeneratedPages(pages=[page]))
+    process_item(vault)(_item(vault))
+    assert list_pages(vault)[0].sources == ["sources/note.md"]
+
+
+def test_step2_prompt_has_guards(vault: Path, fake_adapter: FakeAdapter) -> None:
+    """The step-2 system prompt carries the empty-body, config and title-fidelity instructions."""
+    fake_adapter.respond(Analysis(summary="s"), GeneratedPages(pages=[_page()]))
+    process_item(vault)(_item(vault))
+    system = fake_adapter.calls[1][1][0]["content"]
+    for phrase in ("empty bodies", "schema.md and purpose.md", "exactly as written"):
+        assert phrase in system

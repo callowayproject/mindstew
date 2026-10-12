@@ -136,3 +136,14 @@ def test_reingest_unknown_page_errors(vault: Path) -> None:
     result = CliRunner().invoke(cli, ["ingest", str(vault), "--reingest", "entities/nope.md"])
     assert result.exit_code != 0
     assert "no such page" in result.output
+
+
+def test_vault_root_does_not_stage_config_files(vault: Path, fake_adapter: FakeAdapter) -> None:
+    """Ingesting a vault root skips schema.md and purpose.md."""
+    (vault / "extra.md").write_text("Alice.", encoding="utf-8")
+    _ok(fake_adapter)
+    result = _run(vault, vault)
+    assert result.exit_code == 0, result.output
+    assert not (vault / "sources" / "schema.md").exists()
+    assert not (vault / "sources" / "purpose.md").exists()
+    assert (vault / "sources" / "extra.md").exists()
