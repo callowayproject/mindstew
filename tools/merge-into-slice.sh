@@ -20,7 +20,7 @@ if ! git merge --no-ff -m "${message}" "origin/${ticket}"; then
 fi
 
 uv run pytest -q
-uv run ruff check
+uv run ruff check --extend-exclude .claude/worktrees
 
 git push origin "HEAD:${slice}"
 echo "Merged ${ticket} into ${slice} at $(git rev-parse --short HEAD)"

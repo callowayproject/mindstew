@@ -5,10 +5,13 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from mindstew.vault import PAGE_TYPE_FOLDERS, PAGE_TYPES
+from mindstew.links import Resolver
+from mindstew.vault import PAGE_TYPE_FOLDERS, PAGE_TYPES, vault_path
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    from mindstew.links import Link
 
 
 def wiki_root(vault: Path) -> Path:
@@ -82,8 +85,8 @@ def page_file(vault: Path, name: str) -> Path | None:
     """Return the resolved file for a page path relative to ``wiki/`` (``.md`` optional), or None if not a page."""
     rel = name if name.endswith(".md") else f"{name}.md"
     wiki = wiki_root(vault).resolve()
-    path = (wiki / rel).resolve()
-    if not path.is_file() or not path.is_relative_to(wiki) or path.relative_to(wiki).parts[0] not in PAGE_TYPE_FOLDERS:
+    path = vault_path(wiki, rel)
+    if not path or not path.is_file() or path.relative_to(wiki).parts[0] not in PAGE_TYPE_FOLDERS:
         return None
     return path
 
@@ -92,3 +95,16 @@ def find_page(vault: Path, name: str) -> Page | None:
     """Find a page by path relative to ``wiki/`` (the ``.md`` suffix is optional)."""
     path = page_file(vault, name)
     return read_page(path) if path else None
+
+
+def describe_page(
+    vault: Path, name: str, *, pages: list[Page] | None = None, resolver: Resolver | None = None
+) -> tuple[Page, list[Link]] | None:
+    """Return the page at ``name`` (relative to ``wiki/``) and its links resolved against the whole vault, or None.
+
+    A caller describing many pages passes the vault's ``pages`` (and a ``resolver`` over them) to avoid relisting.
+    """
+    path = page_file(vault, name)
+    pages = list_pages(vault) if pages is None else pages
+    found = next((p for p in pages if path and p.path.resolve() == path), None)
+    return (found, (resolver or Resolver(pages)).resolve_body(found.body)) if found else None

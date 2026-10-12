@@ -5,23 +5,28 @@ retry cap applies) and validates every generated page before writing any, so a f
 """
 
 import logging
+import shutil
+import threading
 from typing import TYPE_CHECKING
 
 import yaml
 from pydantic import BaseModel, Field, field_validator
 
 from mindstew import adapter
+from mindstew.ingest_queue import enqueue, list_items
 from mindstew.links import Resolver
-from mindstew.pages import list_pages, read_page
+from mindstew.pages import describe_page, find_page, list_pages, read_page, wiki_root
 from mindstew.providers import resolve_route
 from mindstew.slugs import new_page_path
-from mindstew.vault import PAGE_TYPES, atomic_write_text
+from mindstew.vault import PAGE_TYPES, atomic_write_text, vault_path
+from mindstew.worker import Worker
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Collection
     from pathlib import Path
 
     from mindstew.ingest_queue import QueueItem
+    from mindstew.worker import Event
 
 logger = logging.getLogger(__name__)
 
@@ -74,7 +79,7 @@ def _read(vault: Path, name: str) -> str:
         return ""
 
 
-def _validate(pages: list[GeneratedPage]) -> None:
+def _validate(vault: Path, pages: list[GeneratedPage]) -> None:
     """Raise ``IngestError`` if any page is invalid; called before anything is written."""
     for page in pages:
         if page.type not in PAGE_TYPES:
@@ -82,7 +87,7 @@ def _validate(pages: list[GeneratedPage]) -> None:
         if not page.title.strip():
             raise IngestError("model returned a page with an empty title")
         for s in page.sources:
-            if s.startswith(("/", "\\")) or ".." in s.replace("\\", "/").split("/"):
+            if vault_path(vault, s) is None:
                 raise IngestError(f"page {page.title!r} has non vault-relative source {s!r}")
 
 
@@ -90,7 +95,8 @@ def _clean_source(vault: Path, s: str) -> str | None:
     """Return ``s`` as ``sources/<file>`` (``source:`` prefix stripped), or None if it is no source in the vault."""
     s = s.strip().removeprefix("source:").strip().replace("\\", "/").removeprefix("./")
     s = s if s.startswith("sources/") else f"sources/{s}"
-    return s if ".." not in s.split("/") and (vault / s).is_file() else None
+    path = vault_path(vault, s)
+    return s if path and path.is_file() else None
 
 
 def _keep(page: GeneratedPage) -> bool:
@@ -146,9 +152,16 @@ def _write_all(
 
 def _log_unresolved(vault: Path, paths: list[Path]) -> None:
     """Log every ``[[wikilink]]`` in the written pages that resolves to no page."""
-    resolver = Resolver(list_pages(vault))
+    wiki = wiki_root(vault).resolve()
+    pages = list_pages(vault)
+    resolver = Resolver(pages)
     for path in paths:
-        for link in resolver.resolve_body(read_page(path).body):
+        try:
+            name = str(path.resolve().relative_to(wiki))
+        except ValueError:
+            continue
+        described = describe_page(vault, name, pages=pages, resolver=resolver)
+        for link in described[1] if described else ():
             if link.page is None:
                 logger.info("unresolved link [[%s]] in %s", link.target, path)
 
@@ -206,9 +219,111 @@ def process_item(
             ],
             GeneratedPages,
         )
-        _validate(generated.pages)
+        _validate(vault, generated.pages)
         pages = [p for p in generated.pages if _keep(p)]
         target = _pick(pages, overwrite) if overwrite and item.path in only else None
         _log_unresolved(vault, _write_all(vault, pages, source, overwrite, target))
 
     return process
+
+
+def stage(
+    sources: Path, base: Path, path: Path, *, overwrite: bool = False, emit: Callable[[str], None] = lambda _: None
+) -> Path | None:
+    """Return the ``sources/`` path for ``path`` (under ``base``), copying it in if needed; None if skipped.
+
+    Hidden files and vault config files are skipped silently, unsupported ones are reported to ``emit`` and
+    skipped, and a clashing different file already in ``sources/`` is kept and reported unless ``overwrite``.
+    """
+    rel = path.relative_to(base)
+    if any(part.startswith(".") for part in rel.parts):
+        return None
+    if path.parent == sources.parent and path.name in CONFIG_FILES:
+        return None
+    if path.suffix.lower() not in TEXT_SUFFIXES:
+        emit(f"skipped (unsupported): {rel}")
+        return None
+    if path.is_relative_to(sources):
+        return path
+    dest = sources / rel
+    if dest.exists() and dest.read_bytes() != path.read_bytes():
+        if not overwrite:
+            emit(f"skipped (exists in sources/, not overwritten): {rel}")
+            return None
+        shutil.copy2(path, dest)
+    elif not dest.exists():
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, dest)
+    return dest
+
+
+def collect(vault: Path, root: Path, emit: Callable[[str], None] = lambda _: None) -> list[Path]:
+    """Stage the text sources under ``root`` (a file or folder) in ``vault/sources`` and return their paths."""
+    sources = (vault / "sources").resolve()
+    root = root.resolve()
+    base = root.parent if root.is_file() else root
+    found = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    return [dest for path in found if (dest := stage(sources, base, path, emit=emit))]
+
+
+def show_event(emit: Callable[[str], None]) -> Callable[[Event], None]:
+    """Return a worker subscriber that reports each item event to ``emit`` as a line."""
+
+    def show(e: Event) -> None:
+        if e.kind != "queue_drained":
+            emit(
+                f"{e.kind.removeprefix('item_')}: {e.path.name if e.path else ''}"
+                + (f" ({e.error})" if e.error else "")
+            )
+
+    return show
+
+
+def drain(vault: Path, process: Callable[[QueueItem], None], emit: Callable[[str], None]) -> int:
+    """Run the worker until ``queue_drained``, reporting to ``emit``; return how many pending items ended failed."""
+    pending = {i.id for i in list_items(vault) if i.status in ("queued", "running")}
+    if not pending:
+        emit("nothing to ingest")
+        return 0
+    drained = threading.Event()
+    worker = Worker(vault, process, poll_interval=0.05)
+    worker.subscribe(show_event(emit))
+    worker.subscribe(lambda e: drained.set() if e.kind == "queue_drained" else None)
+    worker.start()
+    try:
+        drained.wait()
+    finally:
+        worker.stop()
+    return sum(1 for i in list_items(vault) if i.id in pending and i.status == "failed")
+
+
+def reingest_page(vault: Path, page: str, *, emit: Callable[[str], None] = lambda _: None) -> int:
+    """Regenerate ``page`` (relative to ``wiki/``) in place from its sources; return how many items failed.
+
+    Raises ``ValueError`` for an unknown page or a source outside the vault, before enqueuing anything.
+    """
+    found = find_page(vault, page)
+    if found is None:
+        raise ValueError(f"no such page: {page}")
+    for rel in found.sources:  # validate everything before enqueuing anything
+        if vault_path(vault, rel) is None:
+            raise ValueError(f"page source is not inside the vault: {rel!r}")
+    only: set[Path] = set()
+    for rel in found.sources:
+        src = vault / rel
+        if src.is_file():
+            enqueue(vault, src, force=True)
+            only.add(src.resolve())
+        else:
+            emit(f"skipped (missing source): {rel}")
+    return drain(vault, process_item(vault, found.path, only), emit)
+
+
+def ingest_path(vault: Path, path: Path | None = None, *, emit: Callable[[str], None] = lambda _: None) -> int:
+    """Stage ``path`` (a file or folder; default: all of ``sources/``), enqueue it and run the queue.
+
+    Progress lines go to ``emit``. Returns the number of items that failed.
+    """
+    for src in collect(vault, path or vault / "sources", emit):
+        enqueue(vault, src, retry_failed=True)
+    return drain(vault, process_item(vault), emit)
